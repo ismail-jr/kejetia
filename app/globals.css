@@ -1,26 +1,141 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
+  /* Background & Text */
+  --color-background: hsl(220 33% 98%);
+  --color-foreground: hsl(220 40% 12%);
+
+  /* Cards */
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(220 40% 12%);
+
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(220 40% 12%);
+
+  /* UCC Connect Brand Colors */
+
+  /* Crimson from logo */
+  --color-primary: hsl(343 78% 36%);
+  --color-primary-foreground: hsl(0 0% 100%);
+
+  /* Stripe-inspired Navy */
+  --color-secondary: hsl(214 67% 15%);
+  --color-secondary-foreground: hsl(0 0% 100%);
+
+  /* Light Crimson Accent */
+  --color-accent: hsl(343 65% 94%);
+  --color-accent-foreground: hsl(343 78% 30%);
+
+  /* Muted UI Elements */
+  --color-muted: hsl(220 20% 95%);
+  --color-muted-foreground: hsl(220 12% 46%);
+
+  /* Status Colors */
+  --color-success: hsl(142 71% 35%);
+  --color-success-foreground: hsl(0 0% 100%);
+
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(220 40% 12%);
+
+  --color-destructive: hsl(0 72% 51%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+
+  /* Borders & Inputs */
+  --color-border: hsl(220 18% 90%);
+  --color-input: hsl(220 18% 90%);
+  --color-ring: hsl(343 78% 36%);
+
+  /* Radius */
+  --radius-lg: 1rem;
+  --radius-md: calc(1rem - 2px);
+  --radius-sm: calc(1rem - 4px);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Dark Mode */
+@variant dark (&:where(.dark, .dark *));
+
+.dark {
+  /* Background */
+  --color-background: hsl(222 47% 7%);
+  --color-foreground: hsl(210 40% 96%);
+
+  /* Cards */
+  --color-card: hsl(222 35% 11%);
+  --color-card-foreground: hsl(210 40% 96%);
+
+  --color-popover: hsl(222 35% 11%);
+  --color-popover-foreground: hsl(210 40% 96%);
+
+  /* Crimson */
+  --color-primary: hsl(343 70% 55%);
+  --color-primary-foreground: hsl(0 0% 100%);
+
+  /* Navy */
+  --color-secondary: hsl(214 40% 22%);
+  --color-secondary-foreground: hsl(210 40% 96%);
+
+  /* Accent */
+  --color-accent: hsl(343 20% 20%);
+  --color-accent-foreground: hsl(343 50% 92%);
+
+  /* Muted */
+  --color-muted: hsl(222 25% 15%);
+  --color-muted-foreground: hsl(215 15% 65%);
+
+  /* Status */
+  --color-success: hsl(142 60% 45%);
+  --color-success-foreground: hsl(0 0% 100%);
+
+  --color-warning: hsl(38 92% 55%);
+  --color-warning-foreground: hsl(222 47% 7%);
+
+  --color-destructive: hsl(0 70% 60%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+
+  /* Borders */
+  --color-border: hsl(222 20% 20%);
+  --color-input: hsl(222 20% 20%);
+  --color-ring: hsl(343 70% 55%);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: var(--color-border);
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-body);
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+
+  .font-heading {
+    font-family: var(--font-heading);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
 }
