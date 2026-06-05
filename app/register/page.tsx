@@ -3,15 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
 import {
   GraduationCap,
   Mail,
@@ -28,7 +25,9 @@ import {
   Users,
   Star,
   TrendingUp,
+  PlusCircle,
 } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
 
 const schema = z
   .object({
@@ -76,10 +75,12 @@ const benefits = [
 ];
 
 export default function RegisterPage() {
-  const router = useRouter();
+  const { registerUser, isAuthLoading, user } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+
+  // Determine if a student is adding an additional profile role to their authenticated session
+  const isAddingSecondaryRole = !!user;
 
   const {
     register,
@@ -89,7 +90,13 @@ export default function RegisterPage() {
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { role: "student" },
+    defaultValues: {
+      role: "student",
+      // Pre-fill user metadata fields securely if session state layer is hydrated
+      email: user?.email || "",
+      full_name: user?.user_metadata?.full_name || "",
+      student_id: user?.user_metadata?.student_id || "",
+    },
   });
 
   const role = watch("role");
@@ -99,47 +106,13 @@ export default function RegisterPage() {
   };
 
   const onSubmit = async (data: FormData) => {
-    setLoading(true);
-
-    try {
-      const { error } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            full_name: data.full_name,
-            role: data.role,
-          },
-          emailRedirectTo: `${window.location.origin}/verify`,
-        },
-      });
-
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        await supabase.from("profiles").upsert({
-          id: user.id,
-          full_name: data.full_name,
-          email: data.email,
-          student_id: data.student_id,
-          role: data.role,
-        });
-      }
-
-      toast.success("Account created successfully!");
-      router.push(`/verify?email=${encodeURIComponent(data.email)}`);
-    } catch {
-      toast.error("Something went wrong");
-    } finally {
-      setLoading(false);
-    }
+    await registerUser({
+      email: data.email,
+      password: data.password,
+      fullName: data.full_name,
+      studentId: data.student_id,
+      role: data.role,
+    });
   };
 
   const year = new Date().getFullYear();
@@ -148,11 +121,9 @@ export default function RegisterPage() {
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       {/* LEFT PANEL - Modern Hero Section */}
       <div className="hidden lg:flex relative overflow-hidden flex-col justify-between p-10 xl:p-14 bg-gradient-to-br from-primary/95 via-primary/90 to-primary/80 text-white">
-        {/* Animated Background */}
         <div className="absolute inset-0 opacity-30">
           <div className="absolute top-20 -left-20 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" />
           <div className="absolute bottom-10 -right-20 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse delay-1000" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-white/5 rounded-full blur-2xl" />
         </div>
 
         {/* Logo */}
@@ -162,14 +133,14 @@ export default function RegisterPage() {
               src="/images/logo.png"
               alt="UCC Connect Logo"
               fill
-              className="object-contain rounded-xl bg-white/10 backdrop-blur-sm p-2 group-hover:scale-105 transition-transform"
+              sizes="(max-w-768px) 100vw, 33vw"
+              className="object-contain rounded-xl bg-white backdrop-blur-sm p-2 group-hover:scale-105 transition-transform"
             />
           </div>
           <div>
             <span className="font-bold text-xl tracking-tight">
               UCC Connect
             </span>
-            <p className="text-xs text-white/70">Campus Marketplace</p>
           </div>
         </Link>
 
@@ -181,12 +152,11 @@ export default function RegisterPage() {
               <span className="block text-white/90">Earn on campus.</span>
             </h1>
             <p className="text-white/80 text-lg max-w-md">
-              A marketplace for students to share skills and get help from
-              peers.
+              A single profile marketplace for UCC students to share skills,
+              offer services, or secure peer help.
             </p>
           </div>
 
-          {/* Benefits Grid */}
           <div className="grid grid-cols-2 gap-4">
             {benefits.map((benefit) => {
               const Icon = benefit.icon;
@@ -205,24 +175,22 @@ export default function RegisterPage() {
             })}
           </div>
 
-          {/* Trust Indicators */}
           <div className="flex flex-wrap gap-4 pt-4">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-white/80" />
-              <span className="text-sm text-white/80">Free to join</span>
+              <span className="text-sm text-white/80">
+                One single email identity
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <Shield className="w-4 h-4 text-white/80" />
-              <span className="text-sm text-white/80">Verified community</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-white/80" />
-              <span className="text-sm text-white/80">Secure platform</span>
+              <span className="text-sm text-white/80">
+                Dual-role flexibility
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
         <p className="relative z-10 text-white/60 text-sm">
           © {year} UCC Connect · University of Cape Coast
         </p>
@@ -231,7 +199,6 @@ export default function RegisterPage() {
       {/* RIGHT PANEL - Registration Form */}
       <div className="flex items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-md space-y-6">
-          {/* Mobile Logo */}
           <div className="lg:hidden flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
               <div className="relative w-10 h-10">
@@ -239,41 +206,42 @@ export default function RegisterPage() {
                   src="/images/logo.png"
                   alt="UCC Connect Logo"
                   fill
+                  sizes="(max-w-768px) 100vw, 33vw"
                   className="object-contain"
                 />
               </div>
               <div>
                 <span className="font-bold text-lg">UCC Connect</span>
-                <p className="text-xs text-muted-foreground">
-                  Campus Marketplace
-                </p>
               </div>
             </Link>
-            <Sparkles className="w-5 h-5 text-primary" />
           </div>
 
-          {/* Header */}
+          {/* Dynamic Header Titles based on Authentication Status */}
           <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">
-              Create account
+              {isAddingSecondaryRole
+                ? "Unlock secondary role"
+                : "Create account"}
             </h1>
             <p className="text-muted-foreground">
-              Join the UCC student marketplace
+              {isAddingSecondaryRole
+                ? "Add a new operating profile layer using your current student identity"
+                : "Join the dual-role UCC student marketplace"}
             </p>
           </div>
 
-          {/* Role Selection */}
+          {/* Role Selection Blocks */}
           <div className="grid grid-cols-2 gap-3">
             {[
               {
                 id: "student",
-                label: "Student",
+                label: "Student (Receiver)",
                 icon: BookOpen,
                 description: "Browse & discover services",
               },
               {
                 id: "provider",
-                label: "Provider",
+                label: "Provider (Seller)",
                 icon: Briefcase,
                 description: "Offer your skills",
               },
@@ -301,7 +269,6 @@ export default function RegisterPage() {
             ))}
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {/* Full Name */}
             <div className="space-y-2">
@@ -312,7 +279,8 @@ export default function RegisterPage() {
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="full_name"
-                  className="pl-10 h-11 rounded-xl border-border/60 focus:border-primary/50 focus:ring-primary/20"
+                  disabled={isAddingSecondaryRole}
+                  className="pl-10 h-11 rounded-xl disabled:opacity-75 disabled:bg-muted"
                   placeholder="Kwame Nkrumah"
                   {...register("full_name")}
                 />
@@ -324,7 +292,7 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* Email */}
+            {/* Email Address */}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
                 Email Address
@@ -334,7 +302,8 @@ export default function RegisterPage() {
                 <Input
                   id="email"
                   type="email"
-                  className="pl-10 h-11 rounded-xl border-border/60 focus:border-primary/50 focus:ring-primary/20"
+                  disabled={isAddingSecondaryRole}
+                  className="pl-10 h-11 rounded-xl disabled:opacity-75 disabled:bg-muted"
                   placeholder="student@stu.ucc.edu.gh"
                   {...register("email")}
                 />
@@ -344,9 +313,6 @@ export default function RegisterPage() {
                   <span>⚠</span> {errors.email.message}
                 </p>
               )}
-              <p className="text-xs text-muted-foreground">
-                Use your official UCC email address
-              </p>
             </div>
 
             {/* Student ID */}
@@ -356,8 +322,9 @@ export default function RegisterPage() {
               </Label>
               <Input
                 id="student_id"
-                className="h-11 rounded-xl border-border/60 focus:border-primary/50 focus:ring-primary/20"
-                placeholder="UCC123456789"
+                disabled={isAddingSecondaryRole}
+                className="h-11 rounded-xl disabled:opacity-75 disabled:bg-muted"
+                placeholder="PS/ITC/22/12345"
                 {...register("student_id")}
               />
               {errors.student_id && (
@@ -367,11 +334,11 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* Password Fields */}
+            {/* Password Configuration Layout */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-sm font-medium">
-                  Password
+                  {isAddingSecondaryRole ? "Account Password" : "Password"}
                 </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -385,7 +352,7 @@ export default function RegisterPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
@@ -416,7 +383,7 @@ export default function RegisterPage() {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                   >
                     {showConfirmPassword ? (
                       <EyeOff size={16} />
@@ -436,63 +403,52 @@ export default function RegisterPage() {
             {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full h-11 rounded-xl bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all duration-300"
-              disabled={loading}
+              className="w-full h-11 rounded-xl bg-gradient-to-r from-primary to-primary/90 shadow-lg hover:shadow-xl transition-all duration-300"
+              disabled={isAuthLoading}
             >
-              {loading ? (
+              {isAuthLoading ? (
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating account...
+                  Processing request...
                 </div>
+              ) : isAddingSecondaryRole ? (
+                <>
+                  Activate {role === "provider" ? "Provider" : "Student"} View
+                  <PlusCircle className="ml-2 w-4 h-4" />
+                </>
               ) : (
                 <>
-                  Create account
+                  Create Account
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </>
               )}
             </Button>
           </form>
 
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border/60" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-background text-muted-foreground">
-                Already have an account?
-              </span>
-            </div>
-          </div>
+          {!isAddingSecondaryRole && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border/60" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="px-2 bg-background text-muted-foreground">
+                    Already have an account?
+                  </span>
+                </div>
+              </div>
 
-          {/* Login Link */}
-          <p className="text-center text-sm">
-            <Link
-              href="/login"
-              className="text-primary font-medium hover:underline inline-flex items-center gap-1"
-            >
-              Sign in to your account
-              <ArrowRight className="w-3 h-3" />
-            </Link>
-          </p>
-
-          {/* Campus Benefits */}
-          <div className="bg-muted/30 rounded-xl p-4 border border-border/40">
-            <div className="flex items-center gap-2 mb-2">
-              <GraduationCap className="w-4 h-4 text-primary" />
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Why Join?
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-              <span>✓ Exclusively for UCC students</span>
-              <span>✓ Free to join</span>
-              <span>✓ Verified community</span>
-              <span>✓ Secure messaging</span>
-              <span>✓ Build your portfolio</span>
-              <span>✓ Earn while learning</span>
-            </div>
-          </div>
+              <p className="text-center text-sm">
+                <Link
+                  href="/login"
+                  className="text-primary font-medium hover:underline inline-flex items-center gap-1"
+                >
+                  Sign in to your account
+                  <ArrowRight className="w-3 h-3" />
+                </Link>
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
