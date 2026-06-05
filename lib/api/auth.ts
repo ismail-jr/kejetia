@@ -1,0 +1,62 @@
+// lib/api/auth.ts
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+export interface RegisterPayload {
+  email: string;
+  fullName: string;
+  studentId: string;
+  role: "student" | "provider";
+  password: string;
+}
+
+export interface SignInPayload {
+  email: string;
+  password: string;
+}
+
+export const authService = {
+  // Phase 1: Initiate OTP
+  async initiateRegister(payload: RegisterPayload) {
+    const response = await fetch(`${BACKEND_URL}/api/auth/register/initiate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || "Failed to initiate registration");
+    return data;
+  },
+
+  // Phase 2: Verify OTP
+  async verifyRegister(email: string, otp: string) {
+    const response = await fetch(`${BACKEND_URL}/api/auth/register/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Invalid or expired code");
+    return data;
+  },
+
+  // Sign in with email + password
+  async signIn(email: string, password: string) {
+    const response = await fetch(`${BACKEND_URL}/api/auth/signin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password } satisfies SignInPayload),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Sign in failed");
+    return data;
+    // Expected response shape:
+    // {
+    //   session: { access_token: string; refresh_token: string };
+    //   user: { roles: ("student" | "provider")[]; activeRole?: "student" | "provider" };
+    // }
+  },
+};
