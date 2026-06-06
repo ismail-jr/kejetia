@@ -7,7 +7,6 @@ import { supabase } from "@/lib/supabase";
 import StatCard from "@/components/dashboard/StatCard";
 import ServiceCard from "@/components/marketplace/ServiceCard";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Calendar,
@@ -15,12 +14,12 @@ import {
   Star,
   ArrowRight,
   CheckCircle,
-  Clock,
   Search,
   MessageSquare,
   TrendingUp,
 } from "lucide-react";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
 
 type Service = Database["public"]["Tables"]["services"]["Row"] & {
@@ -47,50 +46,78 @@ export default function StudentDashboard() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [recentServices, setRecentServices] = useState<Service[]>([]);
   const [savedCount, setSavedCount] = useState(0);
+  const [reviewsCount, setReviewsCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!profile) return;
-      const [bookingsRes, servicesRes, savedRes] = await Promise.all([
-        supabase
-          .from("bookings")
-          .select(
-            "*, services(title, category, price), profiles!bookings_provider_id_fkey(full_name, avatar_url)",
-          )
-          .eq("student_id", profile.id)
-          .order("created_at", { ascending: false })
-          .limit(5),
-        supabase
-          .from("services")
-          .select("*, profiles(full_name, avatar_url, is_verified)")
-          .eq("status", "approved")
-          .order("created_at", { ascending: false })
-          .limit(4),
-        supabase
-          .from("saved_services")
-          .select("id")
-          .eq("student_id", profile.id),
-      ]);
+      const [bookingsRes, servicesRes, savedRes, reviewsRes] =
+        await Promise.all([
+          supabase
+            .from("bookings")
+            .select(
+              "*, services(title, category, price), profiles!bookings_provider_id_fkey(full_name, avatar_url)",
+            )
+            .eq("student_id", profile.id)
+            .order("created_at", { ascending: false })
+            .limit(5),
+          supabase
+            .from("services")
+            .select("*, profiles(full_name, avatar_url, is_verified)")
+            .eq("status", "approved")
+            .order("created_at", { ascending: false })
+            .limit(4),
+          supabase
+            .from("saved_services")
+            .select("id", { count: "exact" })
+            .eq("student_id", profile.id),
+          supabase
+            .from("reviews")
+            .select("id", { count: "exact" })
+            .eq("student_id", profile.id),
+        ]);
       if (bookingsRes.data) setBookings(bookingsRes.data as Booking[]);
       if (servicesRes.data) setRecentServices(servicesRes.data as Service[]);
-      if (savedRes.data) setSavedCount(savedRes.data.length);
+      if (savedRes.count !== null) setSavedCount(savedRes.count);
+      if (reviewsRes.count !== null) setReviewsCount(reviewsRes.count);
       setLoading(false);
     };
     fetchData();
   }, [profile]);
 
+  const totalBookingsCount = bookings.length;
   const activeBookings = bookings.filter((b) =>
     ["pending", "confirmed", "in_progress"].includes(b.status),
   );
   const completedBookings = bookings.filter((b) => b.status === "completed");
+
+  const activePercentage =
+    totalBookingsCount > 0
+      ? Math.round((activeBookings.length / totalBookingsCount) * 100)
+      : 0;
+  const completedPercentage =
+    totalBookingsCount > 0
+      ? Math.round((completedBookings.length / totalBookingsCount) * 100)
+      : 0;
+  const reviewsPercentage =
+    completedBookings.length > 0
+      ? Math.min(
+          100,
+          Math.round((reviewsCount / completedBookings.length) * 100),
+        )
+      : 0;
+
+  const getStrokeDashoffset = (percentage: number) => {
+    return 88 - (88 * percentage) / 100;
+  };
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-2xl font-black text-foreground font-heading tracking-tight">
             Good{" "}
             {new Date().getHours() < 12
               ? "morning"
@@ -99,81 +126,213 @@ export default function StudentDashboard() {
                 : "evening"}
             , {profile?.full_name?.split(" ")[0]} 👋
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-sm font-medium">
             Here's what's happening with your services today.
           </p>
         </div>
-        <Button asChild className="shadow-primary">
+        <Button asChild className="shadow-primary font-heading font-semibold">
           <Link href="/student/browse">
-            <Search className="mr-2 w-4 h-4" />
+            <Search className="mr-2 w-4 h-4 stroke-[2.5]" />
             Find a Service
           </Link>
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
           title="Active Bookings"
+          subtitle="/ Current"
           value={activeBookings.length}
-          icon={Calendar}
-          iconBg="bg-primary/10"
-          iconColor="text-primary"
           change={
-            activeBookings.length > 0
-              ? `${activeBookings.length} pending`
-              : undefined
+            activeBookings.length > 0 ? `${activePercentage}%` : undefined
           }
           changeType="neutral"
+          changeLabel="of total bookings"
+          rightElement={
+            <div className="flex flex-col items-center justify-center">
+              <div className="relative w-9 h-9 flex items-center justify-center text-primary">
+                <svg className="absolute inset-0 transform -rotate-90 w-full h-full">
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="14"
+                    className="stroke-muted"
+                    strokeWidth="2.5"
+                    fill="none"
+                  />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="14"
+                    className="stroke-primary transition-all duration-500"
+                    strokeWidth="2.5"
+                    fill="none"
+                    strokeDasharray="88"
+                    strokeDashoffset={getStrokeDashoffset(activePercentage)}
+                  />
+                </svg>
+                <Calendar className="w-3.5 h-3.5 text-primary" />
+              </div>
+            </div>
+          }
         />
+
         <StatCard
           title="Completed"
+          subtitle="/ Total"
           value={completedBookings.length}
-          icon={CheckCircle}
-          iconBg="bg-green-100 dark:bg-green-900/20"
-          iconColor="text-green-600"
-          change={completedBookings.length > 0 ? "All done" : undefined}
+          change={
+            completedBookings.length > 0 ? `${completedPercentage}%` : undefined
+          }
           changeType="positive"
+          changeLabel="success rate"
+          rightElement={
+            <div className="flex flex-col items-center justify-center">
+              <div className="relative w-9 h-9 flex items-center justify-center text-emerald-500">
+                <svg className="absolute inset-0 transform -rotate-90 w-full h-full">
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="14"
+                    className="stroke-muted"
+                    strokeWidth="2.5"
+                    fill="none"
+                  />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="14"
+                    className="stroke-emerald-500 transition-all duration-500"
+                    strokeWidth="2.5"
+                    fill="none"
+                    strokeDasharray="88"
+                    strokeDashoffset={getStrokeDashoffset(completedPercentage)}
+                  />
+                </svg>
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+              </div>
+            </div>
+          }
         />
+
         <StatCard
           title="Saved Services"
+          subtitle="/ Marketplace"
           value={savedCount}
-          icon={Heart}
-          iconBg="bg-red-100 dark:bg-red-900/20"
-          iconColor="text-red-500"
+          change={savedCount > 0 ? `+${savedCount}` : undefined}
+          changeType="positive"
+          changeLabel="items watchlisted"
+          rightElement={
+            <div className="flex flex-col items-center justify-center">
+              <div className="relative w-9 h-9 flex items-center justify-center text-rose-500">
+                <svg className="absolute inset-0 transform -rotate-90 w-full h-full">
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="14"
+                    className="stroke-muted"
+                    strokeWidth="2.5"
+                    fill="none"
+                  />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="14"
+                    className="stroke-rose-500 transition-all duration-500"
+                    strokeWidth="2.5"
+                    fill="none"
+                    strokeDasharray="88"
+                    strokeDashoffset={savedCount > 0 ? "35" : "88"}
+                  />
+                </svg>
+                <Heart
+                  className={cn(
+                    "w-3.5 h-3.5 text-rose-500",
+                    savedCount > 0 && "fill-current",
+                  )}
+                />
+              </div>
+            </div>
+          }
         />
+
         <StatCard
           title="Reviews Given"
-          value={completedBookings.length}
-          icon={Star}
-          iconBg="bg-amber-100 dark:bg-amber-900/20"
-          iconColor="text-amber-500"
+          subtitle="/ Evaluation"
+          value={reviewsCount}
+          change={reviewsCount > 0 ? `${reviewsPercentage}%` : undefined}
+          changeType="neutral"
+          changeLabel="completion rate"
+          rightElement={
+            <div className="flex flex-col items-center justify-center">
+              <div className="relative w-9 h-9 flex items-center justify-center text-amber-500">
+                <svg className="absolute inset-0 transform -rotate-90 w-full h-full">
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="14"
+                    className="stroke-muted"
+                    strokeWidth="2.5"
+                    fill="none"
+                  />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="14"
+                    className="stroke-amber-500 transition-all duration-500"
+                    strokeWidth="2.5"
+                    fill="none"
+                    strokeDasharray="88"
+                    strokeDashoffset={getStrokeDashoffset(reviewsPercentage)}
+                  />
+                </svg>
+                <Star
+                  className={cn(
+                    "w-3.5 h-3.5 text-amber-500",
+                    reviewsCount > 0 && "fill-current",
+                  )}
+                />
+              </div>
+            </div>
+          }
         />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Recent Bookings */}
-        <div className="lg:col-span-2 bg-card rounded-2xl border border-border p-5">
+        <div className="lg:col-span-2 bg-card rounded-2xl border border-border/60 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="font-semibold text-foreground">Recent Bookings</h2>
+            <h2 className="font-bold font-heading text-foreground tracking-tight">
+              Recent Bookings
+            </h2>
             <Link
               href="/student/bookings"
-              className="text-sm text-primary hover:underline flex items-center gap-1"
+              className="text-xs font-bold font-heading text-primary hover:underline flex items-center gap-1 tracking-wide uppercase"
             >
-              View all <ArrowRight className="w-3 h-3" />
+              View all <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
           {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-16 rounded-xl animate-shimmer" />
+                <div
+                  key={i}
+                  className="h-16 rounded-xl animate-pulse bg-muted"
+                />
               ))}
             </div>
           ) : bookings.length === 0 ? (
             <div className="text-center py-10">
               <Calendar className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">No bookings yet</p>
-              <Button size="sm" variant="outline" className="mt-3" asChild>
+              <p className="text-muted-foreground text-sm font-medium">
+                No bookings yet
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 font-heading"
+                asChild
+              >
                 <Link href="/student/browse">Browse Services</Link>
               </Button>
             </div>
@@ -182,9 +341,9 @@ export default function StudentDashboard() {
               {bookings.map((booking) => (
                 <div
                   key={booking.id}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors"
+                  className="flex items-center gap-4 p-3.5 rounded-xl border border-border/40 hover:bg-muted/40 transition-colors"
                 >
-                  <Avatar className="w-9 h-9 flex-shrink-0">
+                  <Avatar className="w-10 h-10 flex-shrink-0">
                     <AvatarImage src={booking.profiles?.avatar_url} />
                     <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
                       {booking.profiles?.full_name
@@ -195,22 +354,22 @@ export default function StudentDashboard() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-foreground truncate">
+                    <p className="font-bold text-sm text-foreground truncate font-heading leading-tight">
                       {(booking as any).services?.title || "Service"}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground/80 font-medium mt-1">
                       {booking.booking_date
                         ? format(new Date(booking.booking_date), "MMM d, yyyy")
                         : "Date TBD"}
                     </p>
                   </div>
-                  <div className="text-right flex-shrink-0">
+                  <div className="text-right flex-shrink-0 flex flex-col items-end gap-1.5">
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${STATUS_STYLES[booking.status] || ""}`}
+                      className={`text-[11px] px-2.5 py-0.5 rounded-md font-bold tracking-wide capitalize ${STATUS_STYLES[booking.status] || ""}`}
                     >
                       {booking.status.replace("_", " ")}
                     </span>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs font-black text-foreground font-heading">
                       GH₵{booking.amount}
                     </p>
                   </div>
@@ -222,8 +381,8 @@ export default function StudentDashboard() {
 
         {/* Quick actions */}
         <div className="space-y-4">
-          <div className="bg-card rounded-2xl border border-border p-5">
-            <h2 className="font-semibold text-foreground mb-4">
+          <div className="bg-card rounded-2xl border border-border/60 p-6 shadow-sm">
+            <h2 className="font-bold font-heading text-foreground mb-4 tracking-tight">
               Quick Actions
             </h2>
             <div className="space-y-2">
@@ -232,35 +391,39 @@ export default function StudentDashboard() {
                   icon: Search,
                   label: "Browse Services",
                   href: "/student/browse",
-                  color: "text-primary",
+                  color: "text-primary bg-primary/5",
                 },
                 {
                   icon: Heart,
                   label: "Saved Services",
                   href: "/student/saved",
-                  color: "text-red-500",
+                  color: "text-red-500 bg-red-500/5",
                 },
                 {
                   icon: MessageSquare,
                   label: "Messages",
                   href: "/student/messages",
-                  color: "text-blue-500",
+                  color: "text-blue-500 bg-blue-500/5",
                 },
                 {
                   icon: TrendingUp,
                   label: "My Profile",
                   href: "/student/profile",
-                  color: "text-green-500",
+                  color: "text-green-500 bg-green-500/5",
                 },
               ].map(({ icon: Icon, label, href, color }) => (
                 <Link
                   key={href}
                   href={href}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:border-border/40 hover:bg-muted/50 transition-all duration-150 group"
                 >
-                  <Icon className={`w-4 h-4 ${color}`} />
-                  <span className="text-sm text-foreground">{label}</span>
-                  <ArrowRight className="w-3 h-3 text-muted-foreground ml-auto" />
+                  <div className={`p-2 rounded-lg shrink-0 ${color}`}>
+                    <Icon className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                  <span className="text-sm font-bold text-foreground/90 font-heading tracking-wide">
+                    {label}
+                  </span>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground/40 ml-auto transition-transform group-hover:translate-x-1" />
                 </Link>
               ))}
             </div>
@@ -271,27 +434,27 @@ export default function StudentDashboard() {
       {/* Recommended Services */}
       <div>
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold text-foreground">
+          <h2 className="text-lg font-bold font-heading text-foreground tracking-tight">
             Recommended for You
           </h2>
           <Link
             href="/student/browse"
-            className="text-sm text-primary hover:underline flex items-center gap-1"
+            className="text-xs font-bold font-heading text-primary hover:underline flex items-center gap-1 tracking-wide uppercase"
           >
-            See all <ArrowRight className="w-3 h-3" />
+            See all <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {loading
             ? Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="rounded-2xl bg-card border border-border overflow-hidden"
+                  className="rounded-2xl bg-card border border-border/60 overflow-hidden space-y-4 p-4 animate-pulse"
                 >
-                  <div className="h-44 animate-shimmer" />
-                  <div className="p-4 space-y-3">
-                    <div className="h-4 w-3/4 rounded animate-shimmer" />
-                    <div className="h-3 w-1/2 rounded animate-shimmer" />
+                  <div className="h-40 rounded-xl bg-muted w-full" />
+                  <div className="space-y-2">
+                    <div className="h-4 w-3/4 rounded bg-muted" />
+                    <div className="h-3 w-1/2 rounded bg-muted" />
                   </div>
                 </div>
               ))

@@ -7,10 +7,11 @@ import ServiceGrid from "@/components/marketplace/ServiceGrid";
 import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { toast } from "sonner";
 import type { Database } from "@/lib/database.types";
 
 type Service = Database["public"]["Tables"]["services"]["Row"] & {
-  profiles?: { full_name: string; avatar_url: string; is_verified: boolean };
+  profiles?: { full_name: string; avatar_url: string };
   is_saved?: boolean;
 };
 
@@ -21,27 +22,64 @@ export default function SavedPage() {
 
   const fetchSaved = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("saved_services")
-      .select(
-        "service_id, services(*, profiles(full_name, avatar_url, is_verified))",
-      )
-      .eq("student_id", user.id)
-      .order("created_at", { ascending: false });
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("saved_services")
+        .select("service_id, services(*, profiles(full_name, avatar_url))")
+        .eq("student_id", user.id)
+        .order("created_at", { ascending: false });
 
-    const mapped: Service[] = (data || [])
-      .map((d: any) => (d.services ? { ...d.services, is_saved: true } : null))
-      .filter(Boolean);
-    setServices(mapped);
-    setLoading(false);
+      if (error) throw error;
+
+      const mapped: Service[] = (data || [])
+        .map((d: any) =>
+          d.services ? { ...d.services, is_saved: true } : null,
+        )
+        .filter(Boolean);
+
+      setServices(mapped);
+    } catch (err) {
+      console.error("Error pulling bookmarked lists:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchSaved();
   }, [user]);
 
-  const handleSaveToggle = (serviceId: string, saved: boolean) => {
-    if (!saved) setServices((prev) => prev.filter((s) => s.id !== serviceId));
+  const handleSaveToggle = async (serviceId: string, saved: boolean) => {
+    if (!user) {
+      toast.error("Please log in to save services");
+      return;
+    }
+
+    if (!saved) {
+      const originalServices = [...services];
+      setServices((prev) => prev.filter((s) => s.id !== serviceId));
+
+      toast.promise(
+        async () => {
+          const { error } = await supabase
+            .from("saved_services")
+            .delete()
+            .eq("student_id", user.id)
+            .eq("service_id", serviceId);
+
+          if (error) throw error;
+        },
+        {
+          loading: "Removing from saved list...",
+          success: "Removed from bookmarks!",
+          error: () => {
+            setServices(originalServices);
+            return "Failed to remove from saved";
+          },
+        },
+      );
+    }
   };
 
   return (
