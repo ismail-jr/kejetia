@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
-  GraduationCap,
   Mail,
   Lock,
   Eye,
@@ -22,19 +21,27 @@ import {
   Briefcase,
   MessageSquare,
   CheckCircle,
-  Sparkles,
 } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/contexts/auth-context";
 
+// 1. Zod Validation Setup
 const schema = z.object({
   email: z
     .string()
     .email("Please enter a valid email")
-    .refine(
-      (e) => e.endsWith("@stu.ucc.edu.gh") || e.endsWith("@ucc.edu.gh"),
-      "Please use your UCC student email",
-    ),
+    .refine((e) => {
+      const lowerEmail = e.toLowerCase();
+      const configuredAdmin =
+        process.env.NEXT_PUBLIC_ADMIN_EMAIL?.toLowerCase();
+
+      // Pass validation if it is an authorized institutional address OR matching admin email variable
+      return (
+        lowerEmail.endsWith("@stu.ucc.edu.gh") ||
+        lowerEmail.endsWith("@ucc.edu.gh") ||
+        (configuredAdmin && lowerEmail === configuredAdmin)
+      );
+    }, "Please use your UCC student email or an authorized administrator login"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
@@ -86,23 +93,30 @@ export default function LoginPage() {
 
     try {
       const result = await signIn(data.email, data.password);
+      console.log(result);
 
       if (result) {
         toast.success("Welcome back!");
 
+        // 1. Dynamic, Secure Admin Verification (Always takes priority)
+        if (result.isAdmin) {
+          router.replace("/admin/dashboard");
+          return;
+        }
+
         const { roles, activeRole } = result;
 
-        // Smart Multi-Role Routing Engine
-        if (activeRole) {
-          // Case A: Account explicitly has exactly ONE operational role assigned
-          router.replace(`/${activeRole}/dashboard`);
-        } else if (roles && roles.length > 1) {
-          // Case B: Account holds multi-role profiles (Dual Sign-up)
-          // Interrupt to let them choose their active perspective workspace
+        // 2. Multi-Role check MUST be verified before single role redirects
+        if (roles && roles.length > 1) {
           router.replace("/role-selection");
+          return;
+        }
+
+        // 3. Single-Role User fallback routing flow
+        if (activeRole) {
+          router.replace(`/${activeRole}/dashboard`);
         } else {
-          // Case C: Fallback baseline safeguard
-          const fallbackDashboard = roles[0] || "student";
+          const fallbackDashboard = roles?.[0] || "student";
           router.replace(`/${fallbackDashboard}/dashboard`);
         }
       }
@@ -207,7 +221,6 @@ export default function LoginPage() {
                   className="object-contain"
                 />
               </div>
-
               <div>
                 <span className="font-bold text-lg">Kejetia</span>
               </div>
