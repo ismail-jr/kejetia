@@ -8,6 +8,7 @@ import { authService, RegisterPayload } from "@/lib/api/auth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
+// Precise profile mapping to prevent property resolution error messages
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type UserRole = "student" | "provider";
 
@@ -21,8 +22,8 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
 
   // Multi-role
-  roles: UserRole[]; // all roles this account has, e.g. ["student", "provider"]
-  activeRole: UserRole | null; // the role currently in use
+  roles: UserRole[];
+  activeRole: UserRole | null;
   setActiveRole: (role: UserRole) => void;
 
   // Custom API
@@ -49,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Multi-role state
+  // Multi-role state tracking fields
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [activeRole, setActiveRole] = useState<UserRole | null>(null);
 
@@ -57,13 +58,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [registeringEmail, setRegisteringEmail] = useState("");
 
+  //  Fetch explicit roles array directly from your public.user_roles database table setup
+  const fetchUserRoles = async (userId: string): Promise<UserRole[]> => {
+    try {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
+
+      if (error || !data) return ["student"];
+      return data.map((r) => r.role as UserRole);
+    } catch {
+      return ["student"];
+    }
+  };
+
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .maybeSingle();
+
     setProfile(data);
+
+    // Fallback to active_role row data state if context state hasn't resolved it yet
+    if (data?.active_role && !activeRole) {
+      setActiveRole(data.active_role as UserRole);
+    }
   };
 
   const refreshProfile = async () => {
@@ -80,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRegisteringEmail("");
   };
 
-  // ── Register (unchanged flow) ────────────────────────────────────────────────
+  // ── Register
   const registerUser = async (data: RegisterPayload) => {
     setIsAuthLoading(true);
     try {
@@ -95,11 +117,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ── Verify OTP — now returns roles array ────────────────────────────────────
+  // ── Verify OTP
   const verifyOtp = async (email: string, token: string) => {
     const result = await authService.verifyRegister(email, token);
 
-    // Hydrate Supabase client session
     const accessToken = result.session?.access_token ?? result.token ?? "";
     const refreshToken =
       result.session?.refresh_token ?? result.refreshToken ?? "";
@@ -113,11 +134,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(`Session error: ${sessionError.message}`);
     }
 
-    // Backend now returns roles array; fall back gracefully if older shape
     const userRoles: UserRole[] =
       result.user?.roles ?? (result.role ? [result.role] : ["student"]);
     const decided: UserRole | null =
-      userRoles.length === 1 ? userRoles[0] : null;
+      userRoles.length === 1 ? userRoles[0] : userRoles[0] || "student";
 
     setRoles(userRoles);
     setActiveRole(decided);
@@ -125,14 +145,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { roles: userRoles, activeRole: decided };
   };
 
-  // ── Sign in — backend returns roles array ────────────────────────────────────
+  // ── Sign in
   const signIn = async (email: string, password: string) => {
     setIsAuthLoading(true);
     try {
-      // Call your custom backend sign-in endpoint (returns roles array)
       const result = await authService.signIn(email, password);
 
-      // Hydrate Supabase client with the session your backend returned
       if (result.session?.access_token) {
         const { error: sessionError } = await supabase.auth.setSession({
           access_token: result.session.access_token,
@@ -144,7 +162,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userRoles: UserRole[] = result.user?.roles ?? ["student"];
       const decided: UserRole | null =
         result.user?.activeRole ??
-        (userRoles.length === 1 ? userRoles[0] : null);
+        (userRoles.length === 1 ? userRoles[0] : userRoles[0] || "student");
 
       setRoles(userRoles);
       setActiveRole(decided);
@@ -157,36 +175,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ── Session listener ─────────────────────────────────────────────────────────
+  // ── Session listener with Role Syncing
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
+        const userRoles = await fetchUserRoles(session.user.id);
+        setRoles(userRoles);
+        await fetchProfile(session.user.id);
       }
+      setLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        (async () => {
-          await fetchProfile(session.user.id);
-          setLoading(false);
-        })();
+        const userRoles = await fetchUserRoles(session.user.id);
+        setRoles(userRoles);
+        await fetchProfile(session.user.id);
       } else {
         setProfile(null);
-        setLoading(false);
+        setRoles([]);
+        setActiveRole(null);
       }
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [activeRole]);
+
+  // Handle switching active portal views safely
+  const handleSetActiveRole = async (role: UserRole) => {
+    setActiveRole(role);
+    if (user) {
+      // Keep your public.profiles table's active_role column synced inline with choice switches
+      await supabase
+        .from("profiles")
+        .update({ active_role: role })
+        .eq("id", user.id);
+
+      await refreshProfile();
+    }
+  };
 
   return (
     <AuthContext.Provider
@@ -199,7 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshProfile,
         roles,
         activeRole,
-        setActiveRole,
+        setActiveRole: handleSetActiveRole,
         isAuthLoading,
         registeringEmail,
         registerUser,
