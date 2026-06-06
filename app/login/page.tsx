@@ -201,7 +201,7 @@ export default function LoginPage() {
               <div className="relative w-10 h-10">
                 <Image
                   src="/images/logo.png"
-                  alt="UCC Connect Logo"
+                  alt="Kejetia"
                   fill
                   sizes="(max-w-768px) 100vw, 33vw"
                   className="object-contain"
