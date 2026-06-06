@@ -6,7 +6,6 @@ import { useAuth } from "@/contexts/auth-context";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import {
   LayoutDashboard,
-  Plus,
   Briefcase,
   ClipboardList,
   Star,
@@ -15,11 +14,12 @@ import {
   Bell,
   User,
   Settings,
+  PencilRuler,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/provider/dashboard", icon: LayoutDashboard },
-  { label: "Create Service", href: "/provider/create", icon: Plus },
+  { label: "Create Service", href: "/provider/create", icon: PencilRuler },
   { label: "My Services", href: "/provider/services", icon: Briefcase },
   { label: "Orders", href: "/provider/orders", icon: ClipboardList },
   { label: "Reviews", href: "/provider/reviews", icon: Star },
@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   { label: "Messages", href: "/provider/messages", icon: MessageSquare },
   { label: "Notifications", href: "/provider/notifications", icon: Bell },
   { label: "Profile", href: "/provider/profile", icon: User },
-  { label: "Settings", href: "/provider/settings", icon: Settings },
+  // { label: "Settings", href: "/provider/settings", icon: Settings },
 ];
 
 export default function ProviderLayout({

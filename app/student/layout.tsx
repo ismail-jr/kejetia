@@ -6,24 +6,24 @@ import { useAuth } from "@/contexts/auth-context";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import {
   LayoutDashboard,
-  Search,
   Heart,
   Calendar,
   MessageSquare,
   Bell,
   User,
   Settings,
+  Layers,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/student/dashboard", icon: LayoutDashboard },
-  { label: "Browse Services", href: "/student/browse", icon: Search },
-  { label: "Saved", href: "/student/saved", icon: Heart },
+  { label: "Browse Services", href: "/student/browse", icon: Layers },
   { label: "Bookings", href: "/student/bookings", icon: Calendar },
+  { label: "Saved", href: "/student/saved", icon: Heart },
   { label: "Messages", href: "/student/messages", icon: MessageSquare },
   { label: "Notifications", href: "/student/notifications", icon: Bell },
   { label: "Profile", href: "/student/profile", icon: User },
-  { label: "Settings", href: "/student/settings", icon: Settings },
+  // { label: "Settings", href: "/student/settings", icon: Settings },
 ];
 
 export default function StudentLayout({
