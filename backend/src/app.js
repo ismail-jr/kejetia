@@ -17,5 +17,5 @@ app.use("/api/auth", authRoutes);
 app.get("/health", (req, res) => res.status(200).json({ status: "UP" }));
 
 app.listen(PORT, () => {
-  console.log(`🚀 Authentication gateway active on port ${PORT}`);
+  console.log(` Authentication gateway active on port ${PORT}`);
 });

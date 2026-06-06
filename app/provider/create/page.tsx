@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
 import { useForm } from "react-hook-form";
@@ -18,20 +19,44 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Plus, X, ArrowLeft, Info, ImageIcon } from "lucide-react";
+import {
+  Plus,
+  X,
+  ArrowLeft,
+  Info,
+  ImageIcon,
+  Upload,
+  Trash2,
+  Star,
+  Loader2,
+  BookOpen,
+  Palette,
+  Code2,
+  Camera,
+  PenTool,
+  Music,
+  Dumbbell,
+  Utensils,
+  MoreHorizontal,
+} from "lucide-react";
 
 const CATEGORIES = [
-  "tutoring",
-  "design",
-  "programming",
-  "photography",
-  "writing",
-  "music",
-  "fitness",
-  "cooking",
-  "other",
+  { value: "tutoring", label: "Tutoring", icon: BookOpen },
+  { value: "design", label: "Design", icon: Palette },
+  { value: "programming", label: "Programming", icon: Code2 },
+  { value: "photography", label: "Photography", icon: Camera },
+  { value: "writing", label: "Writing", icon: PenTool },
+  { value: "music", label: "Music", icon: Music },
+  { value: "fitness", label: "Fitness", icon: Dumbbell },
+  { value: "cooking", label: "Cooking", icon: Utensils },
+  { value: "other", label: "Other", icon: MoreHorizontal },
 ];
+
+const MAX_IMAGES = 5;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
 
 const schema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters").max(100),
@@ -46,36 +71,16 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-const PEXELS_SUGGESTIONS: Record<string, string[]> = {
-  tutoring: [
-    "https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg?auto=compress&cs=tinysrgb&w=800",
-    "https://images.pexels.com/photos/3401403/pexels-photo-3401403.jpeg?auto=compress&cs=tinysrgb&w=800",
-  ],
-  design: [
-    "https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=800",
-    "https://images.pexels.com/photos/326514/pexels-photo-326514.jpeg?auto=compress&cs=tinysrgb&w=800",
-  ],
-  programming: [
-    "https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?auto=compress&cs=tinysrgb&w=800",
-    "https://images.pexels.com/photos/574071/pexels-photo-574071.jpeg?auto=compress&cs=tinysrgb&w=800",
-  ],
-  photography: [
-    "https://images.pexels.com/photos/1787220/pexels-photo-1787220.jpeg?auto=compress&cs=tinysrgb&w=800",
-    "https://images.pexels.com/photos/1366957/pexels-photo-1366957.jpeg?auto=compress&cs=tinysrgb&w=800",
-  ],
-  writing: [
-    "https://images.pexels.com/photos/261763/pexels-photo-261763.jpeg?auto=compress&cs=tinysrgb&w=800",
-    "https://images.pexels.com/photos/4052294/pexels-photo-4052294.jpeg?auto=compress&cs=tinysrgb&w=800",
-  ],
-};
-
 export default function CreateServicePage() {
   const { profile } = useAuth();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [images, setImages] = useState<string[]>([]);
-  const [imageUrl, setImageUrl] = useState("");
+  const [images, setImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const {
@@ -106,80 +111,184 @@ export default function CreateServicePage() {
     setValue("tags", newTags);
   };
 
-  const addImage = () => {
-    const url = imageUrl.trim();
-    if (url && !images.includes(url) && images.length < 5) {
-      setImages([...images, url]);
-      setImageUrl("");
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+
+    if (images.length + files.length > MAX_IMAGES) {
+      toast.error(`You can only upload up to ${MAX_IMAGES} images`);
+      return;
+    }
+
+    // Validate files
+    const validFiles = files.filter((file) => {
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        toast.error(`${file.name} is not a valid image type`);
+        return false;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        toast.error(`${file.name} exceeds 5MB limit`);
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length === 0) return;
+
+    setUploading(true);
+
+    try {
+      // Create preview URLs
+      const newPreviews = validFiles.map((file) => URL.createObjectURL(file));
+      setImagePreviews([...imagePreviews, ...newPreviews]);
+      setImages([...images, ...validFiles]);
+
+      toast.success(`${validFiles.length} image(s) added`);
+    } catch (error) {
+      toast.error("Failed to process images");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const addSuggestedImage = (url: string) => {
-    if (!images.includes(url) && images.length < 5) {
-      setImages([...images, url]);
+  const removeImage = (index: number) => {
+    // Revoke object URL to avoid memory leaks
+    URL.revokeObjectURL(imagePreviews[index]);
+
+    const newPreviews = imagePreviews.filter((_, i) => i !== index);
+    const newImages = images.filter((_, i) => i !== index);
+    setImagePreviews(newPreviews);
+    setImages(newImages);
+    toast.success("Image removed");
+  };
+
+  const uploadImagesToStorage = async (
+    serviceId: string,
+  ): Promise<string[]> => {
+    const uploadedUrls: string[] = [];
+
+    for (let i = 0; i < images.length; i++) {
+      const file = images[i];
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${serviceId}/${Date.now()}-${i}.${fileExt}`;
+      const filePath = `services/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("services")
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from("services")
+        .getPublicUrl(filePath);
+
+      uploadedUrls.push(publicUrlData.publicUrl);
     }
+
+    return uploadedUrls;
   };
 
   const onSubmit = async (data: FormData) => {
-    if (!profile) return;
+    if (!profile) {
+      toast.error("Please login to create a service");
+      return;
+    }
+
+    if (images.length === 0) {
+      toast.error("Please upload at least one image for your service");
+      return;
+    }
+
     setLoading(true);
+
     try {
-      const { error } = await supabase.from("services").insert({
-        provider_id: profile.id,
-        title: data.title,
-        description: data.description,
-        category: data.category,
-        price: data.price,
-        images,
-        tags,
-        status: "pending",
-      });
-      if (error) throw error;
+      // First create the service record
+      const { data: serviceData, error: serviceError } = await supabase
+        .from("services")
+        .insert({
+          provider_id: profile.id,
+          title: data.title,
+          description: data.description,
+          category: data.category,
+          price: data.price,
+          tags: tags,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (serviceError) throw serviceError;
+
+      // Upload images to storage
+      const imageUrls = await uploadImagesToStorage(serviceData.id);
+
+      // Update service with image URLs (first image as cover)
+      const { error: updateError } = await supabase
+        .from("services")
+        .update({
+          images: imageUrls,
+        })
+        .eq("id", serviceData.id);
+
+      if (updateError) throw updateError;
+
       toast.success("Service submitted for approval!");
       router.push("/provider/services");
-    } catch {
-      toast.error("Failed to create service. Please try again.");
+    } catch (error: any) {
+      console.error("Error:", error);
+      toast.error(error.message || "Failed to create service");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
           size="icon"
           onClick={() => router.back()}
-          className="rounded-xl"
+          className="rounded-xl hover:bg-muted"
         >
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Create Service</h1>
-          <p className="text-muted-foreground text-sm">
+          <h1 className="text-2xl font-bold tracking-tight">Create Service</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             Submit a new service listing for review
           </p>
         </div>
       </div>
 
-      {/* Info box */}
-      <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex gap-3">
-        <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-        <p className="text-sm text-primary/80">
-          After submitting, your service will be reviewed by an admin within 24
-          hours before it becomes visible to students.
-        </p>
-      </div>
+      {/* Info Box */}
+      <Card className="rounded-2xl p-4 bg-primary/5 border-primary/20">
+        <div className="flex gap-3">
+          <Info className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-primary/80">
+            After submitting, your service will be reviewed by an admin within
+            24 hours before it becomes visible to students.
+          </p>
+        </div>
+      </Card>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div className="bg-card rounded-2xl border border-border p-6 space-y-5">
-          <h2 className="font-semibold text-foreground">Basic Information</h2>
+        {/* Basic Information */}
+        <Card className="rounded-2xl p-6 space-y-5">
+          <h2 className="font-semibold text-foreground flex items-center gap-2">
+            <Star className="w-4 h-4 text-primary" />
+            Basic Information
+          </h2>
 
           <div className="space-y-2">
-            <Label>Service Title *</Label>
+            <Label htmlFor="title" className="text-sm font-medium">
+              Service Title <span className="text-destructive">*</span>
+            </Label>
             <Input
-              placeholder="e.g. Expert Mathematics Tutoring for Level 100-300"
+              id="title"
+              placeholder="e.g., Expert Mathematics Tutoring for Level 100-300"
               className="h-11 rounded-xl"
               {...register("title")}
             />
@@ -190,17 +299,29 @@ export default function CreateServicePage() {
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Category *</Label>
+              <Label htmlFor="category" className="text-sm font-medium">
+                Category <span className="text-destructive">*</span>
+              </Label>
               <Select onValueChange={(v) => setValue("category", v)}>
                 <SelectTrigger className="h-11 rounded-xl">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat} className="capitalize">
-                      {cat}
-                    </SelectItem>
-                  ))}
+                  {CATEGORIES.map((cat) => {
+                    const Icon = cat.icon;
+                    return (
+                      <SelectItem
+                        key={cat.value}
+                        value={cat.value}
+                        className="capitalize"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          <span>{cat.label}</span>
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               {errors.category && (
@@ -210,10 +331,13 @@ export default function CreateServicePage() {
               )}
             </div>
             <div className="space-y-2">
-              <Label>Price (GH₵) *</Label>
+              <Label htmlFor="price" className="text-sm font-medium">
+                Price (GH₵) <span className="text-destructive">*</span>
+              </Label>
               <Input
+                id="price"
                 type="number"
-                placeholder="e.g. 50"
+                placeholder="e.g., 50"
                 className="h-11 rounded-xl"
                 min={1}
                 {...register("price", { valueAsNumber: true })}
@@ -227,8 +351,11 @@ export default function CreateServicePage() {
           </div>
 
           <div className="space-y-2">
-            <Label>Description *</Label>
+            <Label htmlFor="description" className="text-sm font-medium">
+              Description <span className="text-destructive">*</span>
+            </Label>
             <Textarea
+              id="description"
               placeholder="Describe what you offer, your experience, what's included, and anything else students should know..."
               className="rounded-xl resize-none min-h-32"
               rows={6}
@@ -243,7 +370,7 @@ export default function CreateServicePage() {
 
           {/* Tags */}
           <div className="space-y-2">
-            <Label>Tags (optional)</Label>
+            <Label className="text-sm font-medium">Tags (optional)</Label>
             <div className="flex gap-2">
               <Input
                 placeholder="Add a tag..."
@@ -282,100 +409,101 @@ export default function CreateServicePage() {
               </div>
             )}
           </div>
-        </div>
+        </Card>
 
-        {/* Images */}
-        <div className="bg-card rounded-2xl border border-border p-6 space-y-4">
-          <h2 className="font-semibold text-foreground">Service Images</h2>
+        {/* Images Section */}
+        <Card className="rounded-2xl p-6 space-y-4">
+          <h2 className="font-semibold text-foreground flex items-center gap-2">
+            <ImageIcon className="w-4 h-4 text-primary" />
+            Service Images
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Add up to 5 images for your service listing. You can use image URLs.
+            Upload up to {MAX_IMAGES} images. The first image will be used as
+            the cover photo.
           </p>
 
-          <div className="flex gap-2">
-            <Input
-              placeholder="Paste image URL..."
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              className="h-10 rounded-xl"
+          {/* Image Upload Area */}
+          <div
+            className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 transition-colors cursor-pointer"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleImageUpload}
+              disabled={uploading || images.length >= MAX_IMAGES}
             />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={addImage}
-              className="h-10 rounded-xl"
-            >
-              <Plus className="w-4 h-4" />
-            </Button>
+            <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">
+              Click or drag images here to upload
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              JPEG, PNG, WEBP up to 5MB
+            </p>
+            <p className="text-xs text-primary mt-2">
+              {images.length}/{MAX_IMAGES} images uploaded
+            </p>
           </div>
 
-          {/* Suggested images from Pexels */}
-          {category && PEXELS_SUGGESTIONS[category] && images.length === 0 && (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Suggested images for {category}:
-              </p>
-              <div className="flex gap-2">
-                {PEXELS_SUGGESTIONS[category].map((url, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => addSuggestedImage(url)}
-                    className="w-20 h-16 rounded-xl overflow-hidden border border-border hover:border-primary transition-colors"
-                  >
-                    <img
-                      src={url}
-                      alt=""
-                      className="w-full h-full object-cover"
+          {/* Image Previews */}
+          {imagePreviews.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-4">
+              {imagePreviews.map((preview, index) => (
+                <div key={index} className="relative group">
+                  <div className="relative aspect-square rounded-lg overflow-hidden border border-border">
+                    <Image
+                      src={preview}
+                      alt={`Preview ${index + 1}`}
+                      fill
+                      className="object-cover"
                     />
-                  </button>
-                ))}
-                <span className="text-xs text-muted-foreground self-center ml-1">
-                  Click to add
-                </span>
-              </div>
-            </div>
-          )}
-
-          {images.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
-              {images.map((img, i) => (
-                <div
-                  key={i}
-                  className="relative w-20 h-16 rounded-xl overflow-hidden border border-border"
-                >
-                  <img
-                    src={img}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
+                    {index === 0 && (
+                      <div className="absolute top-2 left-2">
+                        <span className="text-[10px] font-medium bg-primary text-white px-2 py-0.5 rounded-full">
+                          Cover
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setImages(images.filter((_, j) => j !== i))}
-                    className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center"
+                    onClick={() => removeImage(index)}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-destructive text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   >
-                    <X className="w-3 h-3 text-white" />
+                    <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </Card>
 
-        <div className="flex gap-3">
+        {/* Action Buttons */}
+        <div className="flex gap-3 pb-6">
           <Button
             type="button"
             variant="outline"
-            className="flex-1 rounded-xl"
+            className="flex-1 h-11 rounded-xl"
             onClick={() => router.back()}
           >
             Cancel
           </Button>
           <Button
             type="submit"
-            className="flex-1 rounded-xl shadow-primary"
-            disabled={loading}
+            className="flex-1 h-11 rounded-xl bg-gradient-to-r from-primary to-primary/90 hover:shadow-lg transition-all"
+            disabled={loading || uploading || images.length === 0}
           >
-            {loading ? "Submitting..." : "Submit for Review"}
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              "Submit for Review"
+            )}
           </Button>
         </div>
       </form>
