@@ -1,4 +1,3 @@
-// controllers/auth.controller.js
 const crypto = require("crypto");
 const supabaseAdmin = require("../config/supabase");
 const {
@@ -25,31 +24,26 @@ const initiateRegister = async (req, res) => {
         .json({ error: "Role must be 'student' or 'provider'." });
     }
 
-    if (
-      role === "student" &&
-      !email.endsWith(".ucc.edu.gh") &&
-      !email.endsWith("@ucc.edu.gh")
-    ) {
-      return res
-        .status(400)
-        .json({ error: "Students must use their official UCC email." });
-    }
-
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find((u) => u.email === email);
+    // 1. Check if user already exists in Auth
+    const {
+      data: { users },
+    } = await supabaseAdmin.auth.admin.listUsers();
+    const existingUser = users.find((u) => u.email === email);
 
     if (existingUser) {
-      const { data: existingRole } = await supabaseAdmin
-        .from("user_roles")
-        .select("role")
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("roles")
         .eq("user_id", existingUser.id)
-        .eq("role", role)
         .maybeSingle();
 
-      if (existingRole) {
-        return res.status(409).json({
-          error: `This email is already registered as a ${role}. Please sign in instead.`,
-        });
+      if (
+        profile &&
+        (profile.roles.includes(role) || profile.roles.includes("admin"))
+      ) {
+        return res
+          .status(409)
+          .json({ error: `You are already registered as a ${role}.` });
       }
 
       saveOtpRecord(email, {
@@ -61,163 +55,142 @@ const initiateRegister = async (req, res) => {
         existingUserId: existingUser.id,
       });
     } else {
-      const otp = crypto.randomInt(100000, 999999).toString();
-      saveOtpRecord(email, { password, fullName, studentId, role, otp });
+      saveOtpRecord(email, {
+        password,
+        fullName,
+        studentId,
+        role,
+        otp: crypto.randomInt(100000, 999999).toString(),
+      });
     }
 
     const record = getOtpRecord(email);
     await sendOtpEmail(email, record.otp);
-
     return res
       .status(200)
-      .json({ message: "Verification code sent to your email address." });
+      .json({ message: "Verification code sent to your email." });
   } catch (error) {
     console.error("initiateRegister error:", error);
-    return res
-      .status(500)
-      .json({ error: "An unexpected error occurred sending your OTP." });
+    return res.status(500).json({ error: "Failed to initiate registration." });
   }
 };
-// ── Phase 2: Verify OTP and provision ─────────────────────────────────────────
+
+// ── Phase 2: Verify OTP and Provision ─────────────────────────────────────────
 const verifyRegisterOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
-
-    if (!email || !otp) {
-      return res
-        .status(400)
-        .json({ error: "Email and verification code are required." });
-    }
-
     const cached = getOtpRecord(email);
 
     if (!cached || cached.otp !== otp) {
-      return res
-        .status(400)
-        .json({ error: "Invalid or expired verification code." });
+      return res.status(400).json({ error: "Invalid or expired code." });
     }
 
-    let userId = cached.existingUserId ?? null;
+    let userId = cached.existingUserId;
 
-    // ── Path A: Existing Auth account, just add the new role ─────────────────
-    if (userId) {
-      const { error: roleError } = await supabaseAdmin
-        .from("user_roles")
-        .insert({ user_id: userId, role: cached.role });
-
-      if (roleError) {
-        if (roleError.code === "23505") {
-          return res
-            .status(409)
-            .json({ error: `You already have a ${cached.role} account.` });
-        }
-        throw roleError;
-      }
-
-      const { data: roles, error: rolesError } = await supabaseAdmin
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId);
-
-      if (rolesError) throw rolesError;
-      const roleList = roles.map((r) => r.role);
-
-      deleteOtpRecord(email);
-      return res.status(200).json({
-        success: true,
-        message: `${cached.role} role added to your account successfully.`,
-        user: {
-          id: userId,
+    // Create auth account if brand new
+    if (!userId) {
+      const { data: authData, error: authError } =
+        await supabaseAdmin.auth.admin.createUser({
           email,
-          roles: roleList,
-          activeRole: cached.role,
-          isNewAccount: false,
-        },
-      });
+          password: cached.password,
+          email_confirm: true,
+        });
+      if (authError) throw authError;
+      userId = authData.user.id;
     }
 
-    // ── Path B: New Auth account — create user + insert role safely ───────────
-    const { data: authData, error: authError } =
-      await supabaseAdmin.auth.admin.createUser({
-        email,
-        password: cached.password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: cached.fullName,
-          student_id: cached.studentId ?? null,
-          primary_role: cached.role,
-        },
-      });
+    const { data: existingProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("roles, is_admin")
+      .eq("user_id", userId)
+      .maybeSingle();
 
-    if (authError) {
-      return res.status(400).json({ error: authError.message });
+    let finalRoles = [cached.role];
+    let existingIsAdmin = false;
+
+    if (existingProfile) {
+      existingIsAdmin = existingProfile.is_admin === true;
+      if (existingProfile.roles) {
+        finalRoles = [...new Set([...existingProfile.roles, cached.role])];
+      }
     }
 
-    userId = authData.user.id;
+    // Determine default active role layer setup safely
+    const finalActiveRole = finalRoles.includes("admin")
+      ? "admin"
+      : cached.role;
 
-    // Securely push the profile's primary operational role assignment
-    const { error: roleError } = await supabaseAdmin
-      .from("user_roles")
-      .insert({ user_id: userId, role: cached.role });
+    const { error: profileError } = await supabaseAdmin.from("profiles").upsert(
+      {
+        user_id: userId,
+        email: email,
+        full_name: cached.fullName,
+        student_id: cached.studentId || null,
+        roles: finalRoles,
+        active_role: finalActiveRole,
+        is_admin: existingIsAdmin || finalRoles.includes("admin"),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
 
-    if (roleError) throw roleError;
+    if (profileError) throw profileError;
 
     deleteOtpRecord(email);
-
     return res.status(201).json({
       success: true,
-      message: "Account created and verified successfully!",
       user: {
         id: userId,
         email,
-        roles: [cached.role],
-        activeRole: cached.role,
-        isNewAccount: true,
+        roles: finalRoles,
+        activeRole: finalActiveRole,
+        isAdmin: existingIsAdmin || finalRoles.includes("admin"),
       },
     });
   } catch (error) {
-    // This logs the real PostgreSQL problem to your local terminal console window
     console.error("====== VERIFY OTP CRITICAL FAILURE ======");
-    console.error("Error Message:", error.message);
-    console.error("Postgres Error Code:", error.code);
-    console.error("Error Details:", error.details);
+    console.error("Message:", error.message);
     console.error("=========================================");
 
     return res.status(500).json({
-      error: error.message || "An error occurred creating your account.",
-      code: error.code,
+      error: "Database error creating new user",
+      details: error.message,
     });
   }
 };
 
-// ── Sign in — returns all roles the user has ──────────────────────────────────
+// ── Phase 3: Sign In ──────────────────────────────────────────────────────────
 const signIn = async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ error: "Email and password are required." });
-    }
 
     const { data, error } = await supabaseAdmin.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) {
-      return res.status(401).json({ error: error.message });
-    }
+    if (error) return res.status(401).json({ error: error.message });
 
-    const { data: roles, error: rolesError } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", data.user.id);
+    // ── FIXED: Added 'is_admin' to the database select string statement query ──
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("roles, active_role, is_admin")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
 
-    if (rolesError) throw rolesError;
+    if (profileError) throw profileError;
 
-    const roleList = roles.map((r) => r.role);
+    const userRoles = profile?.roles || ["student"];
+
+    // Safety check: If roles includes admin but active_role is missing, prioritize admin workspace access
+    const defaultActive = userRoles.includes("admin")
+      ? "admin"
+      : userRoles[0] || "student";
+    const currentActive = profile?.active_role || defaultActive;
+
+    // ── FIXED: Parse explicit boolean assessment for user administrative state accounts ──
+    const checkIsAdmin =
+      profile?.is_admin === true || userRoles.includes("admin");
 
     return res.status(200).json({
       success: true,
@@ -225,14 +198,19 @@ const signIn = async (req, res) => {
       user: {
         id: data.user.id,
         email: data.user.email,
-        roles: roleList,
-        activeRole: roleList.length === 1 ? roleList[0] : null,
+        roles: userRoles,
+        activeRole: currentActive,
+        isAdmin: checkIsAdmin,
       },
     });
   } catch (error) {
     console.error("signIn error:", error);
-    return res.status(500).json({ error: "Sign in failed." });
+    return res.status(500).json({ error: "Sign in failed: " + error.message });
   }
 };
 
-module.exports = { initiateRegister, verifyRegisterOtp, signIn };
+module.exports = {
+  initiateRegister,
+  verifyRegisterOtp,
+  signIn,
+};
