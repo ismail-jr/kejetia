@@ -17,11 +17,10 @@ export default function RoleSelectionPage() {
     }
   }, [user, loading, router]);
 
-  const handleSelectWorkspace = (chosenRole: "student" | "provider") => {
-    // 1. Tell global context what workspace we are viewing
-    setActiveRole(chosenRole);
-    // 2. Push directly into that nested layout
-    router.push(`/${chosenRole}/dashboard`);
+  const handleSelectWorkspace = async (chosenRole: "student" | "provider") => {
+    await setActiveRole(chosenRole);
+
+    router.replace(`/${chosenRole}/dashboard`);
   };
 
   if (loading) {
