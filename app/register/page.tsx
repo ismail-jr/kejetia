@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  GraduationCap,
   Mail,
   Lock,
   Eye,
@@ -21,17 +20,20 @@ import {
   Briefcase,
   Shield,
   CheckCircle,
-  Sparkles,
   Users,
   Star,
   TrendingUp,
   PlusCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { toast } from "sonner";
 
+// Cleaned Zod validation layout to safely support empty string inputs from disabled fields
 const schema = z
   .object({
-    full_name: z.string().min(2, "Full name must be at least 2 characters"),
+    full_name: z
+      .string()
+      .or(z.string().min(2, "Full name must be at least 2 characters")),
     email: z
       .string()
       .email("Please enter a valid email")
@@ -39,7 +41,7 @@ const schema = z
         (e) => e.endsWith("@stu.ucc.edu.gh") || e.endsWith("@ucc.edu.gh"),
         "Use your official UCC email address",
       ),
-    student_id: z.string().min(4, "Student ID is required"),
+    student_id: z.string().or(z.string().min(4, "Student ID is required")),
     role: z.enum(["student", "provider"]),
     password: z.string().min(8, "Password must be at least 8 characters"),
     confirm_password: z.string(),
@@ -79,7 +81,6 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Determine if a student is adding an additional profile role to their authenticated session
   const isAddingSecondaryRole = !!user;
 
   const {
@@ -87,15 +88,17 @@ export default function RegisterPage() {
     handleSubmit,
     setValue,
     watch,
+    setError,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      role: "student",
-      // Pre-fill user metadata fields securely if session state layer is hydrated
+    values: {
+      role: (user ? "provider" : "student") as "student" | "provider",
       email: user?.email || "",
-      full_name: user?.user_metadata?.full_name || "",
-      student_id: user?.user_metadata?.student_id || "",
+      full_name: (user?.user_metadata?.full_name as string) || "",
+      student_id: (user?.user_metadata?.student_id as string) || "",
+      password: "",
+      confirm_password: "",
     },
   });
 
@@ -106,16 +109,47 @@ export default function RegisterPage() {
   };
 
   const onSubmit = async (data: FormData) => {
-    await registerUser({
-      email: data.email,
-      password: data.password,
-      fullName: data.full_name,
-      studentId: data.student_id,
-      role: data.role,
-    });
-  };
+    try {
+      await registerUser({
+        email: data.email,
+        password: data.password,
+        fullName:
+          data.full_name || (user?.user_metadata?.full_name as string) || "",
+        studentId:
+          data.student_id || (user?.user_metadata?.student_id as string) || "",
+        role: data.role,
+      });
+    } catch (error: any) {
+      console.error("Registration processing error caught:", error);
 
-  const year = new Date().getFullYear();
+      // Handle structural error codes or conflicting message states cleanly
+      const errorMessage = error.message?.toLowerCase() || "";
+      const isConflict =
+        error.status === 409 ||
+        error.statusCode === 409 ||
+        errorMessage.includes("already registered") ||
+        errorMessage.includes("conflict") ||
+        errorMessage.includes("already exists");
+
+      if (isConflict) {
+        const friendlyMessage = `This email is already registered as a ${data.role}.`;
+
+        setError("email", {
+          type: "manual",
+          message: friendlyMessage,
+        });
+
+        toast.error("Account Creation Failed", {
+          description: `An account with this email already exists under the ${data.role} profile layer. Please sign in instead.`,
+          duration: 6000,
+        });
+      } else {
+        toast.error(
+          error.message || "An unexpected error occurred during signup.",
+        );
+      }
+    }
+  };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
@@ -126,7 +160,6 @@ export default function RegisterPage() {
           <div className="absolute bottom-10 -right-20 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse delay-1000" />
         </div>
 
-        {/* Logo */}
         <Link href="/" className="relative z-10 flex items-center gap-3 group">
           <div className="relative w-12 h-12">
             <Image
@@ -138,13 +171,10 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <span className="font-bold text-xl tracking-tight">
-              UCC Connect
-            </span>
+            <span className="font-bold text-xl tracking-tight">Kejetia</span>
           </div>
         </Link>
 
-        {/* Main Content */}
         <div className="relative z-10 space-y-8">
           <div className="space-y-4">
             <h1 className="text-4xl xl:text-5xl font-bold leading-tight">
@@ -192,31 +222,13 @@ export default function RegisterPage() {
         </div>
 
         <p className="relative z-10 text-white/60 text-sm">
-          © {year} UCC Connect · University of Cape Coast
+          © 2026 Kejetia · University of Cape Coast
         </p>
       </div>
 
       {/* RIGHT PANEL - Registration Form */}
       <div className="flex items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-md space-y-6">
-          <div className="lg:hidden flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="relative w-10 h-10">
-                <Image
-                  src="/images/logo.png"
-                  alt="UCC Connect Logo"
-                  fill
-                  sizes="(max-w-768px) 100vw, 33vw"
-                  className="object-contain"
-                />
-              </div>
-              <div>
-                <span className="font-bold text-lg">UCC Connect</span>
-              </div>
-            </Link>
-          </div>
-
-          {/* Dynamic Header Titles based on Authentication Status */}
           <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">
               {isAddingSecondaryRole
@@ -249,12 +261,13 @@ export default function RegisterPage() {
               <button
                 key={id}
                 type="button"
+                disabled={isAddingSecondaryRole && role === id}
                 onClick={() => selectRole(id as any)}
                 className={`p-4 rounded-xl border-2 transition-all text-left ${
                   role === id
                     ? "border-primary bg-primary/5 shadow-sm"
                     : "border-border hover:border-primary/30"
-                }`}
+                } ${isAddingSecondaryRole && role !== id ? "animate-pulse border-dashed border-orange-400" : ""}`}
               >
                 <Icon
                   className={`w-5 h-5 mb-2 ${
@@ -303,7 +316,11 @@ export default function RegisterPage() {
                   id="email"
                   type="email"
                   disabled={isAddingSecondaryRole}
-                  className="pl-10 h-11 rounded-xl disabled:opacity-75 disabled:bg-muted"
+                  className={`pl-10 h-11 rounded-xl disabled:opacity-75 disabled:bg-muted ${
+                    errors.email
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : ""
+                  }`}
                   placeholder="student@stu.ucc.edu.gh"
                   {...register("email")}
                 />
@@ -334,7 +351,7 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* Password Configuration Layout */}
+            {/* Password Layout */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-sm font-medium">
@@ -345,7 +362,7 @@ export default function RegisterPage() {
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    className="pl-10 pr-10 h-11 rounded-xl border-border/60 focus:border-primary/50 focus:ring-primary/20"
+                    className="pl-10 pr-10 h-11 rounded-xl"
                     placeholder="********"
                     {...register("password")}
                   />
@@ -376,7 +393,7 @@ export default function RegisterPage() {
                   <Input
                     id="confirm_password"
                     type={showConfirmPassword ? "text" : "password"}
-                    className="pl-10 pr-10 h-11 rounded-xl border-border/60 focus:border-primary/50 focus:ring-primary/20"
+                    className="pl-10 pr-10 h-11 rounded-xl"
                     placeholder="********"
                     {...register("confirm_password")}
                   />
@@ -400,10 +417,9 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Submit Button */}
             <Button
               type="submit"
-              className="w-full h-11 rounded-xl bg-gradient-to-r from-primary to-primary/90 shadow-lg hover:shadow-xl transition-all duration-300"
+              className="w-full h-11 rounded-xl bg-gradient-to-r from-primary to-primary/90 shadow-lg"
               disabled={isAuthLoading}
             >
               {isAuthLoading ? (
@@ -426,7 +442,7 @@ export default function RegisterPage() {
           </form>
 
           {!isAddingSecondaryRole && (
-            <>
+            <div className="space-y-4">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-border/60" />
@@ -437,17 +453,15 @@ export default function RegisterPage() {
                   </span>
                 </div>
               </div>
-
               <p className="text-center text-sm">
                 <Link
                   href="/login"
                   className="text-primary font-medium hover:underline inline-flex items-center gap-1"
                 >
-                  Sign in to your account
-                  <ArrowRight className="w-3 h-3" />
+                  Sign in to your account <ArrowRight className="w-3 h-3" />
                 </Link>
               </p>
-            </>
+            </div>
           )}
         </div>
       </div>
