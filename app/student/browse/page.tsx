@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
 import ServiceGrid from "@/components/marketplace/ServiceGrid";
@@ -10,30 +10,36 @@ import ServiceFilter, {
 import type { Database } from "@/lib/database.types";
 import { toast } from "sonner";
 
-type Service = Database["public"]["Tables"]["services"]["Row"] & {
-  profiles?: { full_name: string; avatar_url: string };
+type DbService = Database["public"]["Tables"]["services"]["Row"];
+type PricingType = "fixed" | "hourly" | "negotiable";
+
+interface ExtendedService extends Omit<DbService, "pricing_type"> {
+  profiles?: { full_name: string; avatar_url: string } | null;
   is_saved?: boolean;
-};
+  pricing_type?: PricingType;
+}
 
 const DEFAULT_FILTERS: ServiceFilters = {
   search: "",
-  category: "all",
+  selectedTags: [],
   minPrice: 0,
-  maxPrice: 500,
+  maxPrice: 10000,
   sortBy: "newest",
   minRating: 0,
 };
 
 export default function BrowsePage() {
   const { user } = useAuth();
-  const [services, setServices] = useState<Service[]>([]);
+  const [servicesData, setServicesData] = useState<any[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<ServiceFilters>(DEFAULT_FILTERS);
 
-  // 1. Fetch Saved Service IDs for the logged-in student
   const fetchSaved = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setSavedIds(new Set());
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from("saved_services")
@@ -48,31 +54,37 @@ export default function BrowsePage() {
     }
   }, [user]);
 
-  // 2. Fetch all approved services for browsing and booking
   const fetchServices = useCallback(async () => {
     setLoading(true);
     try {
       let query = supabase
         .from("services")
-        .select("*, profiles(full_name, avatar_url)")
+        .select(
+          `
+          *,
+          profiles:provider_id (
+            full_name,
+            avatar_url
+          )
+        `,
+        )
         .eq("status", "approved");
 
-      if (filters.minPrice > 0) {
-        query = query.gte("price", filters.minPrice);
-      }
-      if (filters.maxPrice < 500) {
+      // Apply price filters
+      if (filters.minPrice > 0) query = query.gte("price", filters.minPrice);
+      if (filters.maxPrice && filters.maxPrice < 10000)
         query = query.lte("price", filters.maxPrice);
-      }
-      if (filters.category !== "all") {
-        query = query.eq("category", filters.category);
-      }
-      if (filters.search) {
-        query = query.ilike("title", `%${filters.search}%`);
-      }
-      if (filters.minRating > 0) {
-        query = query.gte("avg_rating", filters.minRating);
+
+      // Apply search filter
+      if (filters.search) query = query.ilike("title", `%${filters.search}%`);
+
+      // Apply tag filtering if tags are selected
+      if (filters.selectedTags && filters.selectedTags.length > 0) {
+        // Use the overlaps operator to find services with any of the selected tags
+        query = query.overlaps("tags", filters.selectedTags);
       }
 
+      // Apply sorting
       switch (filters.sortBy) {
         case "price_asc":
           query = query.order("price", { ascending: true });
@@ -80,36 +92,42 @@ export default function BrowsePage() {
         case "price_desc":
           query = query.order("price", { ascending: false });
           break;
+        case "rating":
+          query = query.order("avg_rating", { ascending: false });
+          break;
         default:
           query = query.order("created_at", { ascending: false });
       }
 
       const { data, error } = await query;
+      if (error) throw error;
 
-      if (!error && data) {
-        setServices(
-          (data as any[]).map((s) => ({
-            ...s,
-            price: typeof s.price === "number" ? s.price : parseFloat(s.price),
-            is_saved: savedIds.has(s.id),
-          })),
-        );
-      }
+      setServicesData(data || []);
     } catch (err) {
-      console.error("Error loading marketplace data:", err);
+      console.error("Marketplace relationship execution failed:", err);
+      toast.error("Failed to load browse listings feed.");
     } finally {
       setLoading(false);
     }
-  }, [filters, savedIds]);
+  }, [filters]);
 
-  // Synchronize structural layout rendering hooks
   useEffect(() => {
     fetchSaved();
   }, [fetchSaved]);
 
   useEffect(() => {
     fetchServices();
-  }, [filters, user]);
+  }, [fetchServices]);
+
+  const services = useMemo<ExtendedService[]>(() => {
+    return servicesData.map((s) => ({
+      ...s,
+      profiles: s.profiles || null,
+      price: typeof s.price === "number" ? s.price : parseFloat(s.price || "0"),
+      is_saved: savedIds.has(s.id),
+      pricing_type: (s.pricing_type as PricingType) || "fixed",
+    }));
+  }, [servicesData, savedIds]);
 
   const handleSaveToggle = async (serviceId: string, saved: boolean) => {
     if (!user) {
@@ -123,9 +141,6 @@ export default function BrowsePage() {
       else next.delete(serviceId);
       return next;
     });
-    setServices((prev) =>
-      prev.map((s) => (s.id === serviceId ? { ...s, is_saved: saved } : s)),
-    );
 
     if (saved) {
       toast.promise(
@@ -137,19 +152,14 @@ export default function BrowsePage() {
           if (error) throw error;
         },
         {
-          loading: "Saving service to your bookmarks...",
-          success: "Added to your saved list!",
+          loading: "Saving service...",
+          success: "Added to saved list!",
           error: () => {
             setSavedIds((prev) => {
               const n = new Set(prev);
               n.delete(serviceId);
               return n;
             });
-            setServices((prev) =>
-              prev.map((s) =>
-                s.id === serviceId ? { ...s, is_saved: false } : s,
-              ),
-            );
             return "Could not complete save action";
           },
         },
@@ -174,11 +184,6 @@ export default function BrowsePage() {
               n.add(serviceId);
               return n;
             });
-            setServices((prev) =>
-              prev.map((s) =>
-                s.id === serviceId ? { ...s, is_saved: true } : s,
-              ),
-            );
             return "Could not remove bookmark";
           },
         },
