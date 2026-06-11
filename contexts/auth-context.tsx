@@ -3,17 +3,18 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import type { Database } from "@/lib/database.types";
 import { authService, RegisterPayload } from "@/lib/api/auth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { Database } from "@/lib/database.types";
 
-type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-type UserRole = "student" | "provider" | "admin";
+export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+
+export type UserRole = "student" | "provider" | "admin";
 
 interface AuthResponse {
   roles: UserRole[];
-  activeRole: UserRole | null;
+  activeRole: UserRole;
   isAdmin: boolean;
 }
 
@@ -43,103 +44,86 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [roles, setRoles] = useState<UserRole[]>([]);
+  const [activeRole, setActiveRoleState] = useState<UserRole | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [registeringEmail, setRegisteringEmail] = useState("");
 
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [roles, setRoles] = useState<UserRole[]>([]);
-  const [activeRole, setActiveRole] = useState<UserRole | null>(null);
-
-  // 1. Explicitly type  live database structure locally to override the outdated types file
-  interface LiveProfile extends Omit<Profile, "role"> {
-    role: "student" | "provider" | "admin" | null;
-    active_role: "student" | "provider" | "admin" | null;
-    is_admin: boolean;
-  }
-
-  // ── Unified Profile & Junction Role Loader
-  const fetchProfileAndRoles = async (
-    userId: string,
-  ): Promise<{ profile: Profile | null; roles: UserRole[] }> => {
-    // 1. Fetch the user's profile metadata
-    const { data: profileData, error: profileError } = await supabase
+  // ── Fetch profile by auth user id
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
+    const { data, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("id", userId)
+      .eq("user_id", userId)
       .maybeSingle();
 
-    if (profileError || !profileData) {
-      return { profile: null, roles: ["student"] };
+    if (error) {
+      console.error("fetchProfile error:", error.message);
+      return null;
     }
-
-    // Cast to our verified live structure format
-    const rawProfile = profileData as unknown as LiveProfile;
-
-    // 2. Short-circuit early if they are explicitly marked as a system admin
-    if (rawProfile.is_admin === true || rawProfile.role === "admin") {
-      return { profile: profileData, roles: ["admin"] };
-    }
-
-    // 3. Query your live junction table to gather all assigned consumer roles
-    const { data: rolesData, error: rolesError } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-
-    // Fallback to the single profile role if the junction table fetch fails
-    if (rolesError || !rolesData || rolesData.length === 0) {
-      const fallbackRole = (rawProfile.role as UserRole) || "student";
-      return { profile: profileData, roles: [fallbackRole] };
-    }
-
-    // Map rows out into a clean string array: e.g., ["student", "provider"]
-    const userRoles = rolesData.map((r: any) => r.role as UserRole);
-
-    return { profile: profileData, roles: userRoles };
+    return data as Profile | null;
   };
 
-  // ── Access Router Resolver
-  const resolveAccess = (
-    profile: Profile | null,
-    userRoles: UserRole[],
-  ): AuthResponse => {
-    const rawProfile = profile as unknown as LiveProfile;
+  // ── Sync all auth state from a loaded profile
+  const applyProfile = (p: Profile): AuthResponse => {
+    const validRoles = (p.roles ?? []).filter((r) =>
+      ["student", "provider", "admin"].includes(r),
+    ) as UserRole[];
 
-    const isUserAdmin =
-      rawProfile?.is_admin === true || rawProfile?.role === "admin";
+    const determinedRoles =
+      validRoles.length > 0 ? validRoles : ["student" as UserRole];
 
-    if (isUserAdmin) {
-      return {
-        roles: ["admin"],
-        activeRole: "admin",
-        isAdmin: true,
-      };
-    }
+    const determinedActive =
+      p.active_role && ["student", "provider", "admin"].includes(p.active_role)
+        ? (p.active_role as UserRole)
+        : (determinedRoles[0] as UserRole);
 
-    // If they have multiple roles (like Ismail), do not force a default activeRole yet
-    // if active_role is null. This allows the Login Form to catch roles.length > 1!
-    const assignedActive = rawProfile?.active_role as UserRole | null;
-    const fallbackActive = userRoles.length > 1 ? null : userRoles[0];
+    const adminFlag = p.is_admin === true || determinedRoles.includes("admin");
+
+    setProfile(p);
+    setRoles(determinedRoles);
+    setActiveRoleState(determinedActive);
+    setIsAdmin(adminFlag);
 
     return {
-      roles: userRoles,
-      activeRole: assignedActive || fallbackActive,
-      isAdmin: false,
+      roles: determinedRoles,
+      activeRole: determinedActive,
+      isAdmin: adminFlag,
     };
   };
+
   const syncUser = async (userId: string): Promise<AuthResponse> => {
-    const { profile: profileData, roles: rolesData } =
-      await fetchProfileAndRoles(userId);
-    const access = resolveAccess(profileData, rolesData);
+    const p = await fetchProfile(userId);
+    if (!p) {
+      setProfile(null);
+      setRoles(["student"]);
+      setActiveRoleState("student");
+      setIsAdmin(false);
+      return { roles: ["student"], activeRole: "student", isAdmin: false };
+    }
+    return applyProfile(p);
+  };
 
-    setProfile(profileData);
-    setRoles(access.roles);
-    setActiveRole(access.activeRole);
-    setIsAdmin(access.isAdmin);
+  const setActiveRole = async (role: UserRole) => {
+    if (!user?.id) return;
+    if (!roles.includes(role)) {
+      console.warn(`Role switch rejected — user does not have role: ${role}`);
+      return;
+    }
 
-    return access;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ active_role: role, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id);
+
+    if (error) {
+      console.error("setActiveRole DB error:", error.message);
+      return;
+    }
+
+    setActiveRoleState(role);
   };
 
   const signIn = async (
@@ -147,33 +131,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     password: string,
   ): Promise<AuthResponse> => {
     setIsAuthLoading(true);
-
     try {
       const result = await authService.signIn(email, password);
+
+      if (!result.user) {
+        throw new Error("Authentication payload missing user details.");
+      }
 
       if (result.session?.access_token) {
         const {
           data: { session: newSession },
+          error,
         } = await supabase.auth.setSession({
           access_token: result.session.access_token,
           refresh_token: result.session.refresh_token ?? "",
         });
-
+        if (error) throw new Error(error.message);
         setSession(newSession);
         setUser(newSession?.user ?? null);
       }
 
-      let access: AuthResponse = {
-        roles: ["student"],
-        activeRole: "student",
-        isAdmin: false,
+      const rawUser = result.user;
+      const determinedRoles = (rawUser.roles || ["student"]) as UserRole[];
+
+      const determinedActive = (rawUser.active_role ||
+        rawUser.activeRole ||
+        determinedRoles[0] ||
+        "student") as UserRole;
+      const adminFlag =
+        rawUser.is_admin === true ||
+        rawUser.isAdmin === true ||
+        determinedRoles.includes("admin");
+
+      setRoles(determinedRoles);
+      setActiveRoleState(determinedActive);
+      setIsAdmin(adminFlag);
+
+      fetchProfile(rawUser.id).then((p) => {
+        if (p) setProfile(p);
+      });
+
+      return {
+        roles: determinedRoles,
+        activeRole: determinedActive,
+        isAdmin: adminFlag,
       };
-
-      if (result.user?.id) {
-        access = await syncUser(result.user.id);
-      }
-
-      return access;
+    } catch (error) {
+      console.error("Context signIn error execution:", error);
+      throw error;
     } finally {
       setIsAuthLoading(false);
     }
@@ -187,31 +192,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await authService.verifyRegister(email, token);
 
+      if (!result.user) {
+        throw new Error("Verification payload missing user details.");
+      }
+
       if (result.session?.access_token) {
         const {
           data: { session: newSession },
+          error,
         } = await supabase.auth.setSession({
           access_token: result.session.access_token,
           refresh_token: result.session.refresh_token ?? "",
         });
+        if (error) throw new Error(error.message);
         setSession(newSession);
         setUser(newSession?.user ?? null);
       }
 
-      let access: AuthResponse = {
-        roles: ["student"],
-        activeRole: "student",
-        isAdmin: false,
+      const rawUser = result.user;
+      const determinedRoles = (rawUser.roles || ["student"]) as UserRole[];
+      const determinedActive = (rawUser.active_role ||
+        rawUser.activeRole ||
+        determinedRoles[0] ||
+        "student") as UserRole;
+      const adminFlag =
+        rawUser.is_admin === true ||
+        rawUser.isAdmin === true ||
+        determinedRoles.includes("admin");
+
+      setRoles(determinedRoles);
+      setActiveRoleState(determinedActive);
+      setIsAdmin(adminFlag);
+
+      fetchProfile(rawUser.id).then((p) => {
+        if (p) setProfile(p);
+      });
+
+      return {
+        roles: determinedRoles,
+        activeRole: determinedActive,
+        isAdmin: adminFlag,
       };
+    } catch (err: any) {
+      toast.error(err.message || "OTP verification failed");
+      throw err;
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
 
-      if (result.user?.id) {
-        access = await syncUser(result.user.id);
-      }
-
-      return access;
-    } catch (error: any) {
-      toast.error(error.message || "OTP Verification failed");
-      throw error;
+  const registerUser = async (data: RegisterPayload) => {
+    setIsAuthLoading(true);
+    try {
+      const res = await authService.initiateRegister(data);
+      setRegisteringEmail(data.email);
+      toast.success(res.message || "Verification code sent!");
+      router.push(`/verify?email=${encodeURIComponent(data.email)}`);
+    } catch (err: any) {
+      toast.error(err.message || "Registration failed");
+      throw err;
     } finally {
       setIsAuthLoading(false);
     }
@@ -223,54 +262,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null);
     setSession(null);
     setRoles([]);
-    setActiveRole(null);
+    setActiveRoleState(null);
     setIsAdmin(false);
+    setRegisteringEmail("");
   };
 
   const refreshProfile = async () => {
     if (user?.id) await syncUser(user.id);
   };
 
-  const setActiveRoleSafe = async (role: UserRole) => {
-    if (isAdmin && role !== "admin") return;
-    setActiveRole(role);
-
-    if (user?.id) {
-      await supabase
-        .from("profiles")
-        .update({ active_role: role } as any)
-        .eq("id", user.id);
-    }
-  };
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    let mounted = true;
 
-      if (session?.user?.id) {
-        await syncUser(session.user.id);
+    const init = async () => {
+      try {
+        const {
+          data: { session: s },
+        } = await supabase.auth.getSession();
+        if (!mounted) return;
+
+        if (s?.user) {
+          setSession(s);
+          setUser(s.user);
+          // Await profile sync completely before lowering loading state
+          await syncUser(s.user.id);
+        }
+      } catch (err) {
+        console.error("Auth init error:", err);
+      } finally {
+        if (mounted) setLoading(false);
       }
-      setLoading(false);
-    });
+    };
+
+    init();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    } = supabase.auth.onAuthStateChange(async (event, s) => {
+      if (!mounted) return;
 
-      if (session?.user?.id) {
-        await syncUser(session.user.id);
-      } else if (event === "SIGNED_OUT") {
+      // When signing in or refreshing tokens, pull up the load block to avoid leaks
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        setLoading(true);
+      }
+
+      if (s?.user) {
+        setSession(s);
+        setUser(s.user);
+
+        // Re-fetch and sync the user profile row for BOTH login and token re-authentications
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          await syncUser(s.user.id);
+        }
+      } else {
+        // Reset states completely if unauthenticated
+        setSession(null);
+        setUser(null);
         setProfile(null);
         setRoles([]);
-        setActiveRole(null);
+        setActiveRoleState(null);
         setIsAdmin(false);
       }
-      setLoading(false);
+
+      // Safeguard: Only drop the load curtain once the inner code branch resolves
+      if (mounted) setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
@@ -283,22 +344,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAdmin,
         roles,
         activeRole,
-        setActiveRole: setActiveRoleSafe,
+        setActiveRole,
         signOut,
         refreshProfile,
         isAuthLoading,
         registeringEmail,
-        registerUser: async (data: RegisterPayload) => {
-          setIsAuthLoading(true);
-          try {
-            const res = await authService.initiateRegister(data);
-            setRegisteringEmail(data.email);
-            toast.success(res.message);
-            router.push(`/verify?email=${encodeURIComponent(data.email)}`);
-          } finally {
-            setIsAuthLoading(false);
-          }
-        },
+        registerUser,
         verifyOtp,
         signIn,
       }}

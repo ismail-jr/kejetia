@@ -4,21 +4,28 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
-import {
-  Heart,
-  Calendar,
-  ArrowLeft,
-  Tag,
-  ShieldCheck,
-  User,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { Database } from "@/lib/database.types";
+import { ImageGallery } from "../components/image-gallery";
+import { PriceDisplay } from "../components/price-display";
+import { SaveButton } from "../components/save-btn";
+import { ProviderProfile } from "../components/provider-profile";
+import { ServiceMetadata } from "../components/service-matadata";
+import { PricingInfoBox } from "../components/pricing-info-box";
+
+type PricingType = "fixed" | "hourly" | "negotiable";
 
 type Service = Database["public"]["Tables"]["services"]["Row"] & {
-  profiles?: { full_name: string; avatar_url: string };
+  profiles?: {
+    full_name: string;
+    avatar_url: string;
+    phone?: string | null;
+    location?: string | null;
+  } | null;
+  pricing_type?: PricingType;
 };
 
 export default function ServiceDetailPage() {
@@ -29,26 +36,34 @@ export default function ServiceDetailPage() {
   const [service, setService] = useState<Service | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
-  const [activeImage, setActiveImage] = useState<string>("");
 
-  // 1. Fetch Single Service Details along with the Peer Profile information
   const loadServiceDetails = useCallback(async () => {
     if (!id) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from("services")
-        .select("*, profiles(full_name, avatar_url)")
+        .select(
+          `
+          *, 
+          profiles:provider_id(
+            full_name, 
+            avatar_url,
+            phone,
+            location
+          )
+        `,
+        )
         .eq("id", id)
         .single();
 
       if (error) throw error;
 
       if (data) {
-        setService(data as any);
-        if (data.images && data.images.length > 0) {
-          setActiveImage(data.images[0]);
-        }
+        setService({
+          ...data,
+          pricing_type: (data.pricing_type as PricingType) || "fixed",
+        } as any);
       }
     } catch (err: any) {
       console.error("Error loading service item parameters:", err);
@@ -59,7 +74,6 @@ export default function ServiceDetailPage() {
     }
   }, [id, router]);
 
-  // 2. Determine if this service item is already bookmarked by the user
   const checkSavedStatus = useCallback(async () => {
     if (!user || !id) return;
     try {
@@ -152,18 +166,23 @@ export default function ServiceDetailPage() {
 
   if (!service) return null;
 
-  const displayPrice =
-    typeof service.price === "number"
-      ? service.price.toFixed(2)
-      : parseFloat(service.price || "0").toFixed(2);
+  const getPriceIcon = () => {
+    const pricingType = service.pricing_type || "fixed";
+    switch (pricingType) {
+      case "hourly":
+        return require("lucide-react").Clock;
+      case "negotiable":
+        return require("lucide-react").TrendingUp;
+      default:
+        return require("lucide-react").DollarSign;
+    }
+  };
 
-  const providerAvatar =
-    service.profiles?.avatar_url ||
-    `https://api.dicebear.com/7.x/avataaars/svg?seed=${service.profiles?.full_name || "UCC"}`;
+  const PriceIcon = getPriceIcon();
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      {/* Back Button Actions Nav */}
+      {/* Back Button */}
       <button
         onClick={() => router.back()}
         className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition"
@@ -172,48 +191,18 @@ export default function ServiceDetailPage() {
         Back to Marketplace
       </button>
 
-      {/* Main Structural View Section Grid */}
+      {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Aspect Side: Images & Detailed Description Column Layout */}
+        {/* Left Column - Images & Description */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="space-y-4">
-            {/* Primary Media Display Card */}
-            <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-muted bg-muted shadow-sm">
-              <img
-                src={activeImage || "/images/placeholder-service.jpg"}
-                alt={service.title}
-                className="w-full h-full object-cover"
-              />
-              <span className="absolute bottom-3 left-3 bg-background/80 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold uppercase text-primary tracking-wider">
-                {service.category}
-              </span>
-            </div>
+          <ImageGallery
+            images={service.images || []}
+            category={service.category}
+            pricingType={service.pricing_type || "fixed"}
+            PriceIcon={PriceIcon}
+          />
 
-            {/* Sub-image Gallery Thumbnails Carousel block */}
-            {service.images && service.images.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {service.images.map((imgUrl, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setActiveImage(imgUrl)}
-                    className={`relative w-20 aspect-video rounded-lg overflow-hidden border-2 flex-shrink-0 transition ${
-                      activeImage === imgUrl
-                        ? "border-primary"
-                        : "border-transparent opacity-70 hover:opacity-100"
-                    }`}
-                  >
-                    <img
-                      src={imgUrl}
-                      alt="Thumbnail"
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Description Details Panel */}
+          {/* Description */}
           <div className="bg-card text-card-foreground border border-muted rounded-2xl p-6 space-y-4 shadow-sm">
             <h2 className="text-xl font-bold text-foreground">
               Service Description
@@ -221,71 +210,70 @@ export default function ServiceDetailPage() {
             <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">
               {service.description}
             </p>
+
+            {/* Tags */}
+            {service.tags && service.tags.length > 0 && (
+              <div className="pt-2">
+                <h3 className="text-sm font-semibold text-foreground mb-2">
+                  Tags
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {service.tags.map((tag, idx) => (
+                    <span
+                      key={idx}
+                      className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right Aspect Side: Transaction Summary Booking Column Callouts */}
+        {/* Right Column - Booking Card */}
         <div className="space-y-6">
           <div className="bg-card text-card-foreground border border-muted rounded-2xl p-6 shadow-md space-y-6 sticky top-6">
+            {/* Title & Price */}
             <div className="space-y-2">
-              <h1 className="text-2xl font-black text-foreground leading-tight tracking-tight">
+              <h1 className="text-2xl font-black text-foreground">
                 {service.title}
               </h1>
               <div className="flex items-center justify-between pt-1">
-                <span className="text-2xl font-black text-foreground">
-                  GH₵{displayPrice}
-                </span>
-                <button
-                  onClick={handleSaveToggle}
-                  className={`p-2.5 rounded-xl border border-muted transition ${
-                    isSaved
-                      ? "bg-red-50 dark:bg-red-950/20 text-red-500 border-red-200"
-                      : "bg-background text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <Heart
-                    className={`w-5 h-5 ${isSaved ? "fill-current" : ""}`}
-                  />
-                </button>
+                <PriceDisplay
+                  price={
+                    typeof service.price === "number"
+                      ? service.price
+                      : parseFloat(service.price || "0")
+                  }
+                  pricingType={service.pricing_type || "fixed"}
+                  size="large"
+                />
+                <SaveButton isSaved={isSaved} onToggle={handleSaveToggle} />
               </div>
             </div>
 
             <hr className="border-muted" />
 
-            {/* Provider Student Profile Section Card layout */}
-            <div className="p-3 bg-muted/50 rounded-xl flex items-center gap-3 border border-muted/50">
-              <img
-                src={providerAvatar}
-                alt={service.profiles?.full_name}
-                className="w-10 h-10 rounded-full object-cover border bg-background"
-              />
-              <div className="min-w-0 flex-1">
-                <span className="text-xs text-muted-foreground block font-medium">
-                  Offered by UCC Peer
-                </span>
-                <span className="font-bold text-sm text-foreground block truncate">
-                  {service.profiles?.full_name || "UCC Student"}
-                </span>
-              </div>
-            </div>
+            {/* Provider Profile */}
+            <ProviderProfile
+              fullName={service.profiles?.full_name || "UCC Student"}
+              avatarUrl={service.profiles?.avatar_url}
+              phone={service.profiles?.phone}
+              location={service.profiles?.location}
+            />
 
-            {/* Quick Metrics Indicators Grid info layout */}
-            <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-              <div className="p-3 border border-muted rounded-xl flex flex-col gap-1">
-                <span className="font-semibold text-foreground flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Status
-                </span>
-                <span className="capitalize">{service.status}</span>
-              </div>
-              <div className="p-3 border border-muted rounded-xl flex flex-col gap-1">
-                <span className="font-semibold text-foreground flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-primary" /> Posted
-                </span>
-                <span>{new Date(service.created_at).toLocaleDateString()}</span>
-              </div>
-            </div>
+            {/* Metadata */}
+            <ServiceMetadata
+              status={service.status}
+              createdAt={service.created_at}
+            />
 
-            {/* The Prime Checkout/Booking Transaction Link Button */}
+            {/* Pricing Info */}
+            <PricingInfoBox pricingType={service.pricing_type || "fixed"} />
+
+            {/* Book Button */}
             <Button
               asChild
               size="lg"

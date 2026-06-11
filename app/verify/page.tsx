@@ -21,6 +21,7 @@ export default function VerifyPage() {
   const [resending, setResending] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [canResend, setCanResend] = useState(false);
+  const [isVerified, setIsVerified] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -45,7 +46,6 @@ export default function VerifyPage() {
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
 
-    // Auto-focus next input field
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -71,6 +71,7 @@ export default function VerifyPage() {
       inputRefs.current[5]?.focus();
     }
   };
+
   const handleVerify = async () => {
     const token = otp.join("");
     if (token.length < 6) {
@@ -79,27 +80,28 @@ export default function VerifyPage() {
     }
     setLoading(true);
     try {
-      // 1. Await verification and extract the role data directly from the response
-      const { roles, activeRole } = await verifyOtp(email, token);
+      // 1. Core OTP validation call
+      await verifyOtp(email, token);
 
-      toast.success("Email verified successfully!");
+      // 2. Immediately switch to the loading transition screen
+      setIsVerified(true);
+      toast.success("Email verified successfully! Please sign in.");
 
-      // 2. Clear route handling logic to prevent the dashboard race condition
-      if (activeRole) {
-        // User has exactly one explicit role assigned. Route them straight in.
-        router.replace(`/${activeRole}/dashboard`);
-      } else if (roles && roles.length > 0) {
-        // User has multiple roles but hasn't picked one yet.
-        // Send them to a role selection screen instead of a broken dashboard fallback.
-        router.replace("/role-selection");
-      } else {
-        // Ultimate safety baseline fallback
-        router.replace("/student/dashboard");
-      }
+      // 3. CRITICAL FIX: Kill the auto-generated background session immediately
+      // This stops dashboard layout contexts from flashing or mounting ahead of time
+      await supabase.auth.signOut();
+
+      // Clear the Next.js App Router layout cache
+      router.refresh();
+
+      // 4. Safely redirect back to login page with pre-filled email
+      setTimeout(() => {
+        router.replace(`/login?email=${encodeURIComponent(email)}`);
+      }, 1000);
     } catch (error: any) {
-      toast.error(error.message || "Verification failed. Please try again.");
-    } finally {
+      setIsVerified(false);
       setLoading(false);
+      toast.error(error.message || "Verification failed. Please try again.");
     }
   };
 
@@ -121,6 +123,18 @@ export default function VerifyPage() {
     }
   };
 
+  // Safe intermediate layout transition state
+  if (isVerified) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-muted-foreground text-sm font-medium animate-pulse">
+          Finalizing registration... Preparing login system
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6 sm:p-12">
       <div className="w-full max-w-md space-y-8 bg-card border border-border/40 p-8 rounded-2xl shadow-xl">
@@ -129,7 +143,7 @@ export default function VerifyPage() {
             <div className="relative w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md">
               <Image
                 src="/images/logo.png"
-                alt="UCC Connect Logo"
+                alt="Logo"
                 fill
                 className="object-contain rounded-xl bg-white backdrop-blur-sm p-1.5 group-hover:scale-105 transition-transform"
               />
@@ -161,7 +175,6 @@ export default function VerifyPage() {
           </div>
         </div>
 
-        {/* Input Blocks */}
         <div className="space-y-6">
           <div
             className="flex gap-2 sm:gap-3 justify-center"
@@ -203,7 +216,6 @@ export default function VerifyPage() {
           </Button>
         </div>
 
-        {/* Action Footers */}
         <div className="space-y-4 text-center text-sm pt-2">
           <div className="flex items-center justify-center gap-2 text-muted-foreground">
             {canResend ? (

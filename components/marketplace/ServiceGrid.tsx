@@ -1,14 +1,14 @@
 "use client";
 
-import { Heart } from "lucide-react";
-import Image from "next/image";
+import { Heart, Clock, DollarSign, TrendingUp } from "lucide-react";
 import Link from "next/link";
 
-// 1. Define types matching your BrowsePage data payload structure
 interface ServiceProvider {
   full_name: string;
   avatar_url: string;
 }
+
+type PricingType = "fixed" | "hourly" | "negotiable";
 
 interface Service {
   id: string;
@@ -16,9 +16,15 @@ interface Service {
   description: string;
   category: string;
   price: number | string;
+  pricing_type?: PricingType;
   images: string[];
+  tags?: string[];
   avg_rating?: string | number;
   total_bookings?: number;
+  total_reviews?: number;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
   profiles?: ServiceProvider | null;
   is_saved?: boolean;
 }
@@ -86,10 +92,39 @@ function ServiceCard({
   service: Service;
   onSaveToggle: (serviceId: string, saved: boolean) => void;
 }) {
-  const displayPrice =
-    typeof service.price === "number"
-      ? service.price.toFixed(2)
-      : parseFloat(service.price || "0").toFixed(2);
+  // Helper function to format price display based on pricing type
+  const getPriceDisplay = () => {
+    const price =
+      typeof service.price === "number"
+        ? service.price
+        : parseFloat(service.price || "0");
+    const pricingType = service.pricing_type || "fixed";
+
+    switch (pricingType) {
+      case "hourly":
+        return {
+          label: `GH₵${price.toFixed(2)}/hour`,
+          icon: Clock,
+          suffix: "per hour",
+        };
+      case "negotiable":
+        return {
+          label: `From GH₵${price.toFixed(2)}`,
+          icon: TrendingUp,
+          suffix: "negotiable",
+        };
+      case "fixed":
+      default:
+        return {
+          label: `GH₵${price.toFixed(2)}`,
+          icon: DollarSign,
+          suffix: "fixed price",
+        };
+    }
+  };
+
+  const priceDisplay = getPriceDisplay();
+  const PriceIcon = priceDisplay.icon;
 
   // Default fallback image if none are uploaded
   const thumbnail =
@@ -103,6 +138,14 @@ function ServiceCard({
     (service.profiles?.full_name || "UCC");
 
   const detailsUrl = `/student/browse/${service.id}`;
+  const pricingType = service.pricing_type || "fixed";
+
+  // Format rating display
+  const rating = service.avg_rating
+    ? parseFloat(String(service.avg_rating))
+    : 0;
+  const ratingDisplay = rating > 0 ? rating.toFixed(1) : "New";
+  const bookingsCount = service.total_bookings || 0;
 
   return (
     <div className="bg-card text-card-foreground border border-muted rounded-xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col h-full relative">
@@ -130,6 +173,14 @@ function ServiceCard({
             }`}
           />
         </button>
+
+        {/* Pricing Type Badge */}
+        <div className="absolute bottom-2 left-2 z-10">
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white text-xs font-medium">
+            <PriceIcon className="w-3 h-3" />
+            <span className="capitalize">{pricingType}</span>
+          </span>
+        </div>
       </div>
 
       {/* Card Content Layout */}
@@ -168,9 +219,23 @@ function ServiceCard({
             </span>
           </div>
 
-          <div className="text-right">
-            <span className="text-sm font-black text-foreground">
-              GH₵{displayPrice}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>⭐ {ratingDisplay}</span>
+            <span>•</span>
+            <span>
+              {bookingsCount} booking{bookingsCount !== 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
+
+        {/* Price Display */}
+        <div className="flex items-center justify-between pt-1">
+          <div className="flex flex-col">
+            <span className="text-lg font-bold text-primary">
+              {priceDisplay.label}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {priceDisplay.suffix}
             </span>
           </div>
         </div>

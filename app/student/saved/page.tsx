@@ -10,9 +10,12 @@ import Link from "next/link";
 import { toast } from "sonner";
 import type { Database } from "@/lib/database.types";
 
+type PricingType = "fixed" | "hourly" | "negotiable";
+
 type Service = Database["public"]["Tables"]["services"]["Row"] & {
-  profiles?: { full_name: string; avatar_url: string };
+  profiles?: { full_name: string; avatar_url: string } | null;
   is_saved?: boolean;
+  pricing_type?: PricingType;
 };
 
 export default function SavedPage() {
@@ -24,23 +27,48 @@ export default function SavedPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: savedEntries, error: savedError } = await supabase
         .from("saved_services")
-        .select("service_id, services(*, profiles(full_name, avatar_url))")
-        .eq("student_id", user.id)
-        .order("created_at", { ascending: false });
+        .select("service_id")
+        .eq("student_id", user.id);
 
-      if (error) throw error;
+      if (savedError) throw savedError;
 
-      const mapped: Service[] = (data || [])
-        .map((d: any) =>
-          d.services ? { ...d.services, is_saved: true } : null,
+      // If the user hasn't saved anything, empty state right away
+      if (!savedEntries || savedEntries.length === 0) {
+        setServices([]);
+        return;
+      }
+
+      const savedServiceIds = savedEntries.map((entry) => entry.service_id);
+
+      const { data: servicesData, error: servicesError } = await supabase
+        .from("services")
+        .select(
+          `
+          *,
+          profiles:provider_id (
+            full_name,
+            avatar_url
+          )
+        `,
         )
-        .filter(Boolean);
+        .in("id", savedServiceIds);
+
+      if (servicesError) throw servicesError;
+
+      // Map data to mark them all as saved for the UI components
+      const mapped: Service[] = (servicesData || []).map((service) => ({
+        ...service,
+        profiles: service.profiles || null,
+        is_saved: true,
+        pricing_type: (service.pricing_type as PricingType) || "fixed",
+      }));
 
       setServices(mapped);
-    } catch (err) {
-      console.error("Error pulling bookmarked lists:", err);
+    } catch (err: any) {
+      console.error("Error loading wishlist items:", err);
+      toast.error("Could not fetch your saved bookmarks.");
     } finally {
       setLoading(false);
     }
@@ -52,7 +80,7 @@ export default function SavedPage() {
 
   const handleSaveToggle = async (serviceId: string, saved: boolean) => {
     if (!user) {
-      toast.error("Please log in to save services");
+      toast.error("Please log in to manage saved services");
       return;
     }
 
@@ -100,7 +128,7 @@ export default function SavedPage() {
         services={services}
         loading={loading}
         onSaveToggle={handleSaveToggle}
-        emptyMessage="You haven't saved any services yet. Browse and heart services to save them here."
+        emptyMessage="You haven't saved any services yet. Browse and save services you're interested in!"
       />
 
       {!loading && services.length === 0 && (

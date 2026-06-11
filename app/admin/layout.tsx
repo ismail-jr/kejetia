@@ -32,18 +32,34 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, profile, loading } = useAuth();
+  const { user, activeRole, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading) {
-      if (!user) router.push("/login");
-      else if (profile && profile.role !== "admin")
-        router.push(`/${profile.role}/dashboard`);
+    if (loading) return;
+
+    if (!user) {
+      router.push("/login");
+      return;
     }
-  }, [user, profile, loading, router]);
+
+    if (!activeRole) return;
+
+    if (activeRole === "admin") return;
+
+    router.push(`/${activeRole}/dashboard`);
+  }, [user, activeRole, loading, router]);
 
   if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // If the user isn't an admin, show the loading spinner while the useEffect redirects them.
+  if (activeRole !== "admin") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />

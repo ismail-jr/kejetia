@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth, type UserRole } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -25,10 +25,12 @@ import {
   ChevronDown,
   ArrowLeftRight,
   CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
+import { toast } from "sonner";
 
 interface NavItem {
   label: string;
@@ -48,24 +50,44 @@ export default function DashboardLayout({
   navItems,
   title,
 }: DashboardLayoutProps) {
-  const { user, profile, signOut, roles, activeRole, setActiveRole } =
+  const { user, profile, signOut, roles, activeRole, setActiveRole, loading } =
     useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
 
+  // Security & Sync Guard for Workspace States
   useEffect(() => {
-    if (pathname) {
-      const currentUrlRole = pathname.split("/")[1];
-      if (
-        (currentUrlRole === "student" || currentUrlRole === "provider") &&
-        currentUrlRole !== activeRole
-      ) {
-        setActiveRole(currentUrlRole);
+    if (loading || !pathname || !activeRole || isSwitching) return;
+
+    const currentUrlRole = pathname.split("/")[1] as UserRole;
+    const standardRoles: UserRole[] = ["student", "provider", "admin"];
+
+    if (
+      standardRoles.includes(currentUrlRole) &&
+      currentUrlRole !== activeRole
+    ) {
+      if (roles?.includes(currentUrlRole)) {
+        setActiveRole?.(currentUrlRole);
+      } else {
+        toast.error("Unauthorized workspace access.");
+        router.replace(`/${activeRole}/dashboard`);
       }
     }
-  }, [pathname, activeRole, setActiveRole]);
+
+    // NOTE: Keep this dependency array length exactly fixed at 5.
+    // We omit 'roles' and 'setActiveRole' to maintain a constant size between hydration cycles.
+  }, [pathname, activeRole, isSwitching, router, loading]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   const initials =
     profile?.full_name
@@ -80,17 +102,26 @@ export default function DashboardLayout({
     router.push("/");
   };
 
-  const handleSwitchRole = (role: "student" | "provider") => {
-    setActiveRole(role);
-    router.push(`/${role}/dashboard`);
+  const handleSwitchRole = async (role: "student" | "provider" | "admin") => {
+    if (isSwitching || role === activeRole) return;
+    setIsSwitching(true);
+
+    try {
+      await setActiveRole(role);
+      router.push(`/${role}/dashboard`);
+      toast.success(`Switched view to ${role} workspace`);
+    } catch (err) {
+      toast.error("Failed to swap operational scopes");
+    }
+    {
+      setIsSwitching(false);
+    }
   };
 
-  const otherRole = roles?.find((r) => r !== activeRole);
+  const alternativeRoles = (roles || []).filter((r) => r !== activeRole);
 
-  // ── Sidebar
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-card">
-      {/* Logo area */}
       <div className="px-6 py-6 border-b border-border/40">
         <Link href="/" className="flex items-center gap-3 group">
           <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-primary/10 flex items-center justify-center ring-1 ring-primary/20 group-hover:ring-primary/40 transition-all">
@@ -107,20 +138,18 @@ export default function DashboardLayout({
               Kejetia
             </p>
             <p className="text-[11px] text-muted-foreground mt-1 leading-none capitalize font-medium tracking-wide">
-              {activeRole ?? profile?.role ?? "student"} portal
+              {activeRole} portal
             </p>
           </div>
         </Link>
       </div>
 
-      {/* Nav section label */}
       <div className="px-6 pt-6 pb-2">
         <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50">
           Navigation
         </p>
       </div>
 
-      {/* Nav links */}
       <nav className="flex-1 px-4 pb-4 space-y-2 overflow-y-auto">
         {navItems.map(({ label, href, icon: Icon, badge }) => {
           const isActive = pathname === href || pathname.startsWith(href + "/");
@@ -162,7 +191,6 @@ export default function DashboardLayout({
         })}
       </nav>
 
-      {/* Bottom user dropdown */}
       <div className="p-4 border-t border-border/40 bg-muted/20">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -171,9 +199,9 @@ export default function DashboardLayout({
                 <Avatar
                   className={cn(
                     "w-10 h-10 transition-transform duration-200 group-hover:scale-105",
-                    activeRole === "provider"
-                      ? "ring-2 ring-amber-500/30"
-                      : "ring-2 ring-primary/30",
+                    activeRole === "provider" && "ring-2 ring-amber-500/30",
+                    activeRole === "admin" && "ring-2 ring-red-500/30",
+                    activeRole === "student" && "ring-2 ring-primary/30",
                   )}
                 >
                   <AvatarImage
@@ -184,30 +212,27 @@ export default function DashboardLayout({
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-
-                {/* Active online status dot */}
                 <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-card" />
               </div>
 
-              {/* Outer text wrapper constrained to stop overflow issues */}
               <div className="flex-1 min-w-0 flex flex-col justify-center">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <p className="text-sm font-bold text-foreground truncate leading-none font-heading">
                     {profile?.full_name ?? "User"}
                   </p>
-                  {/* Visual Micro-Badge representing current view state */}
                   <span
                     className={cn(
                       "text-[9px] px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider select-none leading-none shrink-0 scale-90 origin-left",
-                      activeRole === "provider"
-                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                        : "bg-primary/10 text-primary",
+                      activeRole === "provider" &&
+                        "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                      activeRole === "admin" &&
+                        "bg-red-500/10 text-red-600 dark:text-red-400",
+                      activeRole === "student" && "bg-primary/10 text-primary",
                     )}
                   >
-                    {activeRole ?? "Student"}
+                    {activeRole}
                   </span>
                 </div>
-
                 <p className="text-xs text-muted-foreground/80 truncate mt-1.5 leading-none font-medium">
                   {user?.email}
                 </p>
@@ -237,29 +262,40 @@ export default function DashboardLayout({
 
             <DropdownMenuItem
               disabled
-              className="text-xs font-semibold focus:bg-transparent"
+              className="text-xs font-semibold focus:bg-transparent opacity-90"
             >
               <CheckCircle2
                 className={cn(
                   "mr-2 h-4 w-4",
-                  activeRole === "provider" ? "text-amber-500" : "text-primary",
+                  activeRole === "provider" && "text-amber-500",
+                  activeRole === "admin" && "text-red-500",
+                  activeRole === "student" && "text-primary",
                 )}
               />
-              <span className="capitalize">
-                Active: {activeRole ?? profile?.role} Mode
-              </span>
+              <span className="capitalize">Active: {activeRole} Mode</span>
             </DropdownMenuItem>
 
-            {otherRole && (
-              <DropdownMenuItem
-                onClick={() =>
-                  handleSwitchRole(otherRole as "student" | "provider")
-                }
-                className="cursor-pointer font-semibold text-xs py-2"
-              >
-                <ArrowLeftRight className="mr-2 h-4 w-4 text-muted-foreground" />
-                <span>Switch to {otherRole} Portal</span>
-              </DropdownMenuItem>
+            {alternativeRoles.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                {alternativeRoles.map((roleString) => (
+                  <DropdownMenuItem
+                    key={roleString}
+                    onClick={() =>
+                      handleSwitchRole(
+                        roleString as "student" | "provider" | "admin",
+                      )
+                    }
+                    disabled={isSwitching}
+                    className="cursor-pointer font-semibold text-xs py-2 data-[disabled]:opacity-50"
+                  >
+                    <ArrowLeftRight className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <span className="capitalize">
+                      Switch to {roleString} Portal
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </>
             )}
 
             <DropdownMenuSeparator />
@@ -279,23 +315,18 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-64 border-r border-border/50 flex-col fixed h-full z-20">
         <SidebarContent />
       </aside>
 
-      {/* Main area */}
       <div className="flex-1 lg:ml-64 flex flex-col min-h-screen">
-        {/* Top header */}
         <header className="h-16 border-b border-border/50 bg-card/70 backdrop-blur-xl sticky top-0 z-10 flex items-center px-4 sm:px-6 gap-3">
-          {/* Mobile hamburger */}
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="lg:hidden h-9 w-9">
                 <Menu className="w-5 h-5" />
               </Button>
             </SheetTrigger>
-            <SheetTrigger asChild />
             <SheetContent
               side="left"
               className="w-64 p-0 border-r border-border/50"
@@ -304,7 +335,6 @@ export default function DashboardLayout({
             </SheetContent>
           </Sheet>
 
-          {/* Page title */}
           {title && (
             <h1 className="text-base font-bold text-foreground hidden sm:block tracking-tight font-heading">
               {title}
@@ -313,9 +343,7 @@ export default function DashboardLayout({
 
           <div className="flex-1" />
 
-          {/* Right controls */}
           <div className="flex items-center gap-1.5">
-            {/* Theme toggle */}
             <Button
               variant="ghost"
               size="icon"
@@ -329,23 +357,20 @@ export default function DashboardLayout({
               )}
             </Button>
 
-            {/* Notifications */}
             <Button
               variant="ghost"
               size="icon"
               className="h-9 w-9 rounded-lg relative"
               asChild
             >
-              <Link href={`/${activeRole ?? profile?.role}/notifications`}>
+              <Link href={`/${activeRole}/notifications`}>
                 <Bell className="w-4.5 h-4.5 text-muted-foreground" />
-                {/* Unread dot — wire to real count */}
                 <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-destructive rounded-full" />
               </Link>
             </Button>
           </div>
         </header>
 
-        {/* Page content */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>

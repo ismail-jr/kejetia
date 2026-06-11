@@ -25,23 +25,8 @@ import {
 import Image from "next/image";
 import { useAuth } from "@/contexts/auth-context";
 
-// 1. Zod Validation Setup
 const schema = z.object({
-  email: z
-    .string()
-    .email("Please enter a valid email")
-    .refine((e) => {
-      const lowerEmail = e.toLowerCase();
-      const configuredAdmin =
-        process.env.NEXT_PUBLIC_ADMIN_EMAIL?.toLowerCase();
-
-      // Pass validation if it is an authorized institutional address OR matching admin email variable
-      return (
-        lowerEmail.endsWith("@stu.ucc.edu.gh") ||
-        lowerEmail.endsWith("@ucc.edu.gh") ||
-        (configuredAdmin && lowerEmail === configuredAdmin)
-      );
-    }, "Please use your UCC student email or an authorized administrator login"),
+  email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
@@ -76,13 +61,15 @@ const features = [
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signIn } = useAuth();
+  const { signIn, signOut } = useAuth();
+
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -91,44 +78,64 @@ export default function LoginPage() {
   const onSubmit = async (data: FormData) => {
     setLoading(true);
 
+    const email = data.email.toLowerCase();
+
+    const isUccEmail =
+      email.endsWith("@stu.ucc.edu.gh") || email.endsWith("@ucc.edu.gh");
+
     try {
       const result = await signIn(data.email, data.password);
-      console.log(result);
 
-      if (result) {
-        toast.success("Welcome back!");
-
-        // 1. Dynamic, Secure Admin Verification (Always takes priority)
-        if (result.isAdmin) {
-          router.replace("/admin/dashboard");
-          return;
-        }
-
-        const { roles, activeRole } = result;
-
-        // 2. Multi-Role check MUST be verified before single role redirects
-        if (roles && roles.length > 1) {
-          router.replace("/role-selection");
-          return;
-        }
-
-        // 3. Single-Role User fallback routing flow
-        if (activeRole) {
-          router.replace(`/${activeRole}/dashboard`);
-        } else {
-          const fallbackDashboard = roles?.[0] || "student";
-          router.replace(`/${fallbackDashboard}/dashboard`);
-        }
+      if (!result) {
+        toast.error("Login failed");
+        setLoading(false);
+        return;
       }
-    } catch (error: any) {
-      toast.error(error.message || "Invalid login credentials");
+
+      const roles = result.roles || [];
+      const activeRole = result.activeRole;
+      const isAdmin =
+        result.isAdmin || roles.includes("admin") || activeRole === "admin";
+
+      if (!roles.length) {
+        await signOut();
+        setLoading(false);
+        return;
+      }
+
+      const multipleRoles = roles.length > 1;
+
+      if (!isUccEmail && !isAdmin) {
+        setError("email", {
+          type: "manual",
+          message: "Use UCC email or admin account",
+        });
+
+        await signOut();
+        return;
+      }
+
+      toast.success("Login successful");
+
+      let path = "/login";
+
+      if (isAdmin) {
+        path = "/admin/dashboard";
+      } else if (multipleRoles) {
+        path = "/role-selection";
+      } else if (activeRole) {
+        path = `/${activeRole}/dashboard`;
+      } else if (roles.length > 0) {
+        path = `/${roles[0]}/dashboard`;
+      }
+
+      router.replace(path);
+    } catch (err: any) {
+      toast.error(err.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
-
-  const year = new Date().getFullYear();
-
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       {/* LEFT PANEL */}
@@ -136,23 +143,20 @@ export default function LoginPage() {
         <div className="absolute inset-0 opacity-30">
           <div className="absolute top-20 -left-20 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" />
           <div className="absolute bottom-10 -right-20 w-96 h-96 bg-primary-foreground/10 rounded-full blur-3xl animate-pulse delay-1000" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-white/5 rounded-full blur-2xl" />
         </div>
 
         <Link href="/" className="relative z-10 flex items-center gap-3 group">
           <div className="relative w-12 h-12">
             <Image
               src="/images/logo.png"
-              alt="UCC Connect Logo"
+              alt="Kejetia Logo"
               fill
               sizes="(max-w-768px) 100vw, 33vw"
               className="object-contain rounded-xl bg-white backdrop-blur-sm p-2 group-hover:scale-105 transition-transform"
             />
           </div>
           <div>
-            <span className="font-bold text-xl tracking-tight">
-              Kejetia
-            </span>{" "}
+            <span className="font-bold text-xl tracking-tight">Kejetia</span>
           </div>
         </Link>
 
@@ -203,30 +207,13 @@ export default function LoginPage() {
         </div>
 
         <p className="relative z-10 text-white/60 text-sm">
-          © {year} UCC Connect · University of Cape Coast
+          © 2026 Kejetia · University of Cape Coast
         </p>
       </div>
 
       {/* RIGHT PANEL - Form UI */}
       <div className="flex items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-md space-y-8">
-          <div className="lg:hidden flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="relative w-10 h-10">
-                <Image
-                  src="/images/logo.png"
-                  alt="Kejetia"
-                  fill
-                  sizes="(max-w-768px) 100vw, 33vw"
-                  className="object-contain"
-                />
-              </div>
-              <div>
-                <span className="font-bold text-lg">Kejetia</span>
-              </div>
-            </Link>
-          </div>
-
           <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
             <p className="text-muted-foreground">
@@ -234,7 +221,13 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSubmit(onSubmit)(e);
+            }}
+            className="space-y-5"
+          >
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
                 Email Address
@@ -300,9 +293,9 @@ export default function LoginPage() {
               {loading ? (
                 "Signing in..."
               ) : (
-                <>
-                  Sign In <ArrowRight className="ml-2 w-4 h-4" />
-                </>
+                <span className="flex items-center justify-center gap-2">
+                  Sign In <ArrowRight className="w-4 h-4" />
+                </span>
               )}
             </Button>
           </form>
