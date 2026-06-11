@@ -14,6 +14,24 @@ export interface SignInPayload {
   password: string;
 }
 
+// Strictly map the raw dynamic JSON payload coming out of your Express controller
+export interface BackendAuthResponse {
+  success: boolean;
+  session?: {
+    access_token: string;
+    refresh_token: string;
+  };
+  user?: {
+    id: string;
+    email: string;
+    roles: ("student" | "provider" | "admin")[];
+    activeRole?: "student" | "provider" | "admin";
+    active_role?: "student" | "provider" | "admin";
+    isAdmin?: boolean;
+    is_admin?: boolean;
+  };
+}
+
 export const authService = {
   // Phase 1: Initiate OTP
   async initiateRegister(payload: RegisterPayload) {
@@ -30,7 +48,10 @@ export const authService = {
   },
 
   // Phase 2: Verify OTP
-  async verifyRegister(email: string, otp: string) {
+  async verifyRegister(
+    email: string,
+    otp: string,
+  ): Promise<BackendAuthResponse> {
     const response = await fetch(`${BACKEND_URL}/api/auth/register/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -43,7 +64,7 @@ export const authService = {
   },
 
   // Sign in with email + password
-  async signIn(email: string, password: string) {
+  async signIn(email: string, password: string): Promise<BackendAuthResponse> {
     const response = await fetch(`${BACKEND_URL}/api/auth/signin`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -53,10 +74,5 @@ export const authService = {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Sign in failed");
     return data;
-    // Expected response shape:
-    // {
-    //   session: { access_token: string; refresh_token: string };
-    //   user: { roles: ("student" | "provider")[]; activeRole?: "student" | "provider" };
-    // }
   },
 };
