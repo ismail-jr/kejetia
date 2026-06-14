@@ -4,7 +4,7 @@ import { Merriweather, Plus_Jakarta_Sans } from "next/font/google";
 import { AuthProvider } from "@/contexts/auth-context";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "./theme-provider";
-
+import "react-day-picker/dist/style.css";
 const merriweather = Merriweather({
   subsets: ["latin"],
   variable: "--font-heading",
@@ -19,7 +19,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "UCC Connect – Peer-to-Peer Service Exchange",
+  title: "Kejetia | Peer-Peer Marketplace-UCC",
   description:
     "Verified peer-to-peer service exchange platform exclusively for University of Cape Coast students.",
 };
