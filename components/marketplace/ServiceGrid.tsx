@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Heart, Clock, DollarSign, TrendingUp } from "lucide-react";
 import Link from "next/link";
+import BookingModal from "../booking/booking-modal";
 
 interface ServiceProvider {
   full_name: string;
@@ -12,6 +14,7 @@ type PricingType = "fixed" | "hourly" | "negotiable";
 
 interface Service {
   id: string;
+  provider_id: string;
   title: string;
   description: string;
   category: string;
@@ -36,14 +39,15 @@ interface ServiceGridProps {
   emptyMessage?: string;
 }
 
-// 2. Main ServiceGrid Component
 export default function ServiceGrid({
   services,
   loading,
   onSaveToggle,
   emptyMessage = "No services found.",
 }: ServiceGridProps) {
-  // Skeleton Loader modified to track 3 items across large display screens
+  const [activeBookingService, setActiveBookingService] =
+    useState<Service | null>(null);
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -62,7 +66,6 @@ export default function ServiceGrid({
     );
   }
 
-  // Empty State Layout
   if (services.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed rounded-xl p-8 bg-card">
@@ -72,27 +75,47 @@ export default function ServiceGrid({
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      {services.map((service) => (
-        <ServiceCard
-          key={service.id}
-          service={service}
-          onSaveToggle={onSaveToggle}
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {services.map((service) => (
+          <ServiceCard
+            key={service.id}
+            service={service}
+            onSaveToggle={onSaveToggle}
+            onBookClick={(targetService) =>
+              setActiveBookingService(targetService)
+            }
+          />
+        ))}
+      </div>
+
+      {activeBookingService && (
+        <BookingModal
+          isOpen={!!activeBookingService}
+          onClose={() => setActiveBookingService(null)}
+          serviceId={activeBookingService.id}
+          serviceTitle={activeBookingService.title}
+          providerId={activeBookingService.provider_id}
+          servicePrice={
+            typeof activeBookingService.price === "number"
+              ? activeBookingService.price
+              : parseFloat(activeBookingService.price || "0")
+          }
         />
-      ))}
-    </div>
+      )}
+    </>
   );
 }
 
-// 3. Child ServiceCard Component
 function ServiceCard({
   service,
   onSaveToggle,
+  onBookClick,
 }: {
   service: Service;
   onSaveToggle: (serviceId: string, saved: boolean) => void;
+  onBookClick: (service: Service) => void;
 }) {
-  // Helper function to format price display based on pricing type
   const getPriceDisplay = () => {
     const price =
       typeof service.price === "number"
@@ -126,13 +149,11 @@ function ServiceCard({
   const priceDisplay = getPriceDisplay();
   const PriceIcon = priceDisplay.icon;
 
-  // Default fallback image if none are uploaded
   const thumbnail =
     service.images && service.images.length > 0
       ? service.images[0]
       : "/images/placeholder-service.jpg";
 
-  // Default avatar image fallback
   const avatarFallback =
     "https://api.dicebear.com/7.x/avataaars/svg?seed=" +
     (service.profiles?.full_name || "UCC");
@@ -140,7 +161,6 @@ function ServiceCard({
   const detailsUrl = `/student/browse/${service.id}`;
   const pricingType = service.pricing_type || "fixed";
 
-  // Format rating display
   const rating = service.avg_rating
     ? parseFloat(String(service.avg_rating))
     : 0;
@@ -149,7 +169,6 @@ function ServiceCard({
 
   return (
     <div className="bg-card text-card-foreground border border-muted rounded-xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col h-full relative">
-      {/* Service Thumbnail & Save Button */}
       <div className="relative aspect-video w-full overflow-hidden bg-muted">
         <img
           src={thumbnail}
@@ -174,7 +193,6 @@ function ServiceCard({
           />
         </button>
 
-        {/* Pricing Type Badge */}
         <div className="absolute bottom-2 left-2 z-10">
           <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white text-xs font-medium">
             <PriceIcon className="w-3 h-3" />
@@ -183,30 +201,21 @@ function ServiceCard({
         </div>
       </div>
 
-      {/* Card Content Layout */}
       <div className="p-4 flex flex-col flex-grow justify-between space-y-3">
-        {/* Simple non-clickable informational wrapper block */}
         <div className="space-y-1.5 flex-grow">
-          {/* Category Tag */}
           <span className="text-xs font-semibold tracking-wider text-primary uppercase">
             {service.category}
           </span>
-
-          {/* Title */}
           <h3 className="font-bold text-base leading-tight text-foreground line-clamp-1 mt-0.5">
             {service.title}
           </h3>
-
-          {/* Truncated Description */}
           <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mt-1">
             {service.description}
           </p>
         </div>
 
-        {/* Divider line */}
         <hr className="border-muted my-1" />
 
-        {/* Peer Provider Info & Dynamic Pricing */}
         <div className="flex items-center justify-between mt-auto">
           <div className="flex items-center space-x-2 min-w-0">
             <img
@@ -228,7 +237,6 @@ function ServiceCard({
           </div>
         </div>
 
-        {/* Price Display */}
         <div className="flex items-center justify-between pt-1">
           <div className="flex flex-col">
             <span className="text-lg font-bold text-primary">
@@ -240,7 +248,6 @@ function ServiceCard({
           </div>
         </div>
 
-        {/* Dynamic Dual Interactive Action Buttons Split Layout */}
         <div className="grid grid-cols-2 gap-2 pt-2">
           <Link
             href={detailsUrl}
@@ -248,12 +255,14 @@ function ServiceCard({
           >
             View Details
           </Link>
-          <Link
-            href={`/marketplace/bookings/new?serviceId=${service.id}`}
+
+          <button
+            type="button"
+            onClick={() => onBookClick(service)}
             className="block text-center w-full bg-primary text-primary-foreground text-xs font-semibold py-2 px-3 rounded-lg hover:bg-primary/90 transition shadow-sm active:scale-[0.98]"
           >
             Book Now
-          </Link>
+          </button>
         </div>
       </div>
     </div>

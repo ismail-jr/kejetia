@@ -34,15 +34,17 @@ export default function ProfilePage({ forcedRole }: ProfilePageProps) {
         location: formPayload.location || null,
         bio: formPayload.bio || "",
         avatar_url: resolvedAvatarUrl,
-        student_id: formPayload.student_id || null, // Shared column fallback
+        student_id: formPayload.student_id || null,
         updated_at: new Date().toISOString(),
       };
 
-      // Apply extra provider configurations if matching target parameters
       if (targetRole === "provider" || targetRole === "admin") {
         baseUpdate.momo_number = formPayload.momo_number || null;
         baseUpdate.momo_name = formPayload.momo_name || null;
         baseUpdate.momo_network = formPayload.momo_network || null;
+        baseUpdate.available_days = formPayload.available_days || [];
+        baseUpdate.available_time =
+          formPayload.available_time || "08:00 AM - 05:00 PM";
       }
 
       const { error } = await supabase
@@ -58,7 +60,6 @@ export default function ProfilePage({ forcedRole }: ProfilePageProps) {
       console.error("Profile specification persistence failure details:");
       console.dir(err);
 
-      // Comprehensive catch including PostgREST 409 Conflict status codes
       const errorString =
         (JSON.stringify(err) || "") + (err?.message || "") + (err?.code || "");
 
@@ -69,7 +70,6 @@ export default function ProfilePage({ forcedRole }: ProfilePageProps) {
         err?.statusCode === 409;
 
       if (isDuplicateStudentId) {
-        // Construct clean standard signature payload for children
         throw {
           code: "23505",
           message: err?.message || "profiles_student_id_unique_idx",

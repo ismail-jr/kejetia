@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/lib/supabase";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   User,
   Phone,
@@ -17,9 +18,21 @@ import {
   MapPin,
   UploadCloud,
   CreditCard,
+  CalendarDays,
+  Clock,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+
+const DAYS_OF_WEEK = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
 
 const providerSchema = z.object({
   full_name: z.string().min(2, "Business or full name must be valid"),
@@ -39,6 +52,15 @@ const providerSchema = z.object({
   momo_network: z.enum(["MTN", "Telecel", "AirtelTigo"] as const, {
     message: "Select either MTN, Telecel, or AirtelTigo",
   }),
+  available_days: z
+    .array(z.string())
+    .min(1, "Select at least one operating day"),
+  available_time: z
+    .string()
+    .min(
+      2,
+      "Provide a brief description of your active times (e.g., 8am - 4pm)",
+    ),
 });
 
 type ProviderFormData = z.infer<typeof providerSchema>;
@@ -65,6 +87,7 @@ export default function ProviderProfile({
     getValues,
     reset,
     setError,
+    control,
     formState: { errors, isDirty },
   } = useForm<ProviderFormData>({
     resolver: zodResolver(providerSchema),
@@ -78,6 +101,14 @@ export default function ProviderProfile({
       momo_number: initialData?.momo_number || "",
       momo_name: initialData?.momo_name || "",
       momo_network: initialData?.momo_network || "MTN",
+      available_time: initialData?.available_time || "08:00 AM - 05:00 PM",
+      available_days: initialData?.available_days || [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+      ],
     },
   });
 
@@ -93,6 +124,14 @@ export default function ProviderProfile({
         momo_number: initialData.momo_number || "",
         momo_name: initialData.momo_name || "",
         momo_network: initialData.momo_network || "MTN",
+        available_time: initialData.available_time || "08:00 AM - 05:00 PM",
+        available_days: initialData.available_days || [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+        ],
       });
     }
   }, [initialData, reset]);
@@ -207,6 +246,7 @@ export default function ProviderProfile({
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+      {/* Provider Business Details */}
       <div className="bg-card rounded-2xl border border-border/50 p-6 shadow-sm space-y-4">
         <h2 className="font-bold text-foreground font-heading text-lg">
           Provider Business Details
@@ -357,7 +397,7 @@ export default function ProviderProfile({
           </Label>
           <Textarea
             id="bio"
-            placeholder="Describe the service provisions, skills, or delivery terms..."
+            placeholder="Describe your services, skills, or operational terms..."
             className="rounded-xl bg-muted/20 resize-none"
             rows={3}
             {...register("bio")}
@@ -365,6 +405,87 @@ export default function ProviderProfile({
         </div>
       </div>
 
+      {/* Service Availability Settings */}
+      <div className="bg-card rounded-2xl border border-border/50 p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-5 h-5 text-primary" />
+            <h2 className="font-bold text-foreground font-heading text-lg">
+              Service Availability
+            </h2>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground -mt-2">
+          Select the active days and standard hours you are open to receive
+          bookings on campus.
+        </p>
+
+        <Controller
+          name="available_days"
+          control={control}
+          render={({ field }) => (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+              {DAYS_OF_WEEK.map((day) => {
+                const isChecked = field.value?.includes(day);
+                return (
+                  <label
+                    key={day}
+                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all select-none hover:bg-muted/30 ${
+                      isChecked
+                        ? "border-primary bg-primary/5 font-semibold text-primary"
+                        : "border-border/60 bg-muted/10 text-muted-foreground"
+                    }`}
+                  >
+                    <Checkbox
+                      checked={isChecked}
+                      onCheckedChange={(checked) => {
+                        const updated = checked
+                          ? [...(field.value || []), day]
+                          : (field.value || []).filter((d) => d !== day);
+                        field.onChange(updated);
+                      }}
+                    />
+                    <span className="text-sm">{day}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        />
+        {errors.available_days && (
+          <p className="text-destructive text-xs mt-1">
+            {errors.available_days.message}
+          </p>
+        )}
+
+        {/* 🧠 NEW AVAILABLE TIME BOUNDARY FIELD */}
+        <div className="space-y-2 pt-2">
+          <Label
+            htmlFor="available_time"
+            className="font-semibold text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"
+          >
+            <Clock className="w-3.5 h-3.5 text-muted-foreground" /> Standard
+            Daily Operating Hours *
+          </Label>
+          <Input
+            id="available_time"
+            placeholder="E.g., 8:00 AM - 5:00 PM, or Free during afternoon periods"
+            className="h-11 rounded-xl bg-muted/20"
+            {...register("available_time")}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Let clients know your general availability window so they can
+            coordinate specific session times appropriately.
+          </p>
+          {errors.available_time && (
+            <p className="text-destructive text-xs">
+              {errors.available_time.message}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile Money Payout Details */}
       <div className="bg-card rounded-2xl border border-amber-500/20 p-6 shadow-sm space-y-4">
         <div className="flex items-center gap-2">
           <CreditCard className="w-5 h-5 text-amber-500" />
@@ -426,7 +547,7 @@ export default function ProviderProfile({
             </Label>
             <Input
               id="momo_name"
-              placeholder="E.g., Emmanuel Mensah"
+              placeholder="E.g., Sadiq Abubakar"
               className="h-11 rounded-xl bg-muted/20"
               {...register("momo_name")}
             />
