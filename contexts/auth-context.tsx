@@ -38,6 +38,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// ── Generic timeout wrapper so a hung promise can never freeze the UI forever
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} timed out after ${ms}ms`)),
+        ms,
+      ),
+    ),
+  ]);
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
@@ -278,14 +295,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const {
           data: { session: s },
-        } = await supabase.auth.getSession();
+        } = await withTimeout(supabase.auth.getSession(), 8000, "getSession");
         if (!mounted) return;
 
         if (s?.user) {
           setSession(s);
           setUser(s.user);
-          // Await profile sync completely before lowering loading state
-          await syncUser(s.user.id);
+          // Await profile sync completely before lowering loading state,
+          // but guarded by a timeout so a hung query can't freeze the app.
+          try {
+            await withTimeout(syncUser(s.user.id), 8000, "syncUser (init)");
+          } catch (err) {
+            console.error("Profile sync timed out/failed on init:", err);
+          }
         }
       } catch (err) {
         console.error("Auth init error:", err);
@@ -296,12 +318,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     init();
 
+    // NOTE: this callback intentionally does NOT call other Supabase async
+    // methods directly in its body — doing so can deadlock the auth client,
+    // since Supabase holds an internal lock while processing the state
+    // change event. Any follow-up Supabase calls are deferred via
+    // setTimeout(..., 0) so they run after the lock is released.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, s) => {
+    } = supabase.auth.onAuthStateChange((event, s) => {
       if (!mounted) return;
 
-      // When signing in or refreshing tokens, pull up the load block to avoid leaks
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         setLoading(true);
       }
@@ -310,12 +336,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(s);
         setUser(s.user);
 
-        // Re-fetch and sync the user profile row for BOTH login and token re-authentications
         if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-          await syncUser(s.user.id);
+          // Defer the profile sync out of this callback's call stack
+          setTimeout(async () => {
+            if (!mounted) return;
+            try {
+              await withTimeout(
+                syncUser(s.user.id),
+                8000,
+                "syncUser (auth change)",
+              );
+            } catch (err) {
+              console.error(
+                "Profile sync timed out/failed on auth change:",
+                err,
+              );
+            } finally {
+              if (mounted) setLoading(false);
+            }
+          }, 0);
+          return; // loading is lowered inside the deferred block above
         }
       } else {
-        // Reset states completely if unauthenticated
+        // Reset state completely if unauthenticated
         setSession(null);
         setUser(null);
         setProfile(null);
@@ -324,7 +367,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsAdmin(false);
       }
 
-      // Safeguard: Only drop the load curtain once the inner code branch resolves
       if (mounted) setLoading(false);
     });
 
