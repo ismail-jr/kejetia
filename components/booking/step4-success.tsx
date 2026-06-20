@@ -79,7 +79,7 @@ export function Step4Success({ providerProfile, onClose }: Step4SuccessProps) {
       )}
 
       <Button onClick={onClose} className="w-full mt-2 rounded-xl font-medium">
-        Close Wizard Panel View
+        Close
       </Button>
     </div>
   );

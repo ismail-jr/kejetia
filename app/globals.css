@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
 @theme {
+  /* Flattened variables directly inside @theme */
+  --chart-2: oklch(0.7 0.15 70);
+
   --font-heading: var(--font-heading);
   --font-body: var(--font-body);
+
   /* Background & Text */
   --color-background: hsl(220 33% 98%);
   --color-foreground: hsl(220 40% 12%);
@@ -15,7 +19,6 @@
   --color-popover-foreground: hsl(220 40% 12%);
 
   /* UCC Connect Brand Colors */
-
   /* Crimson from logo */
   --color-primary: hsl(343 78% 36%);
   --color-primary-foreground: hsl(0 0% 100%);
@@ -53,10 +56,13 @@
   --radius-sm: calc(1rem - 4px);
 }
 
-/* Dark Mode */
+/* Dark Mode Configuration */
 @variant dark (&:where(.dark, .dark *));
 
 .dark {
+  /* Overwrite chart-2 for dark mode here instead of inside @theme */
+  --chart-2: oklch(0.75 0.15 70);
+
   /* Background */
   --color-background: hsl(222 47% 7%);
   --color-foreground: hsl(210 40% 96%);

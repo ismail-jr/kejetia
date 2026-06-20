@@ -122,6 +122,7 @@ export default function BrowsePage() {
   const services = useMemo<ExtendedService[]>(() => {
     return servicesData.map((s) => ({
       ...s,
+      provider_id: s.provider_id,
       profiles: s.profiles || null,
       price: typeof s.price === "number" ? s.price : parseFloat(s.price || "0"),
       is_saved: savedIds.has(s.id),
@@ -211,7 +212,7 @@ export default function BrowsePage() {
       </div>
 
       <ServiceGrid
-        services={services}
+        services={services as any}
         loading={loading}
         onSaveToggle={handleSaveToggle}
         emptyMessage="No approved services match your search. Try different keywords or filters."

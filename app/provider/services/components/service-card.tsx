@@ -5,7 +5,6 @@ import {
   Edit,
   Archive,
   Trash2,
-  Star,
   Clock,
   DollarSign,
   TrendingUp,
@@ -23,15 +22,26 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { Database } from "@/lib/database.types";
-
-type Service = Database["public"]["Tables"]["services"]["Row"];
+import type { ServiceWithReviews } from "./types";
 
 interface ProviderServiceCardProps {
-  service: Service;
-  onEditClick: (service: Service) => void;
+  service: ServiceWithReviews;
+  onEditClick: (service: ServiceWithReviews) => void;
   onArchiveClick: (id: string) => void;
   onDeleteClick: (id: string) => void;
+}
+
+function StarIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.007z" />
+    </svg>
+  );
 }
 
 export function ProviderServiceCard({
@@ -44,18 +54,13 @@ export function ProviderServiceCard({
   const StatusIcon = statusConfig.icon;
   const imageUrl = service.images?.[0] || PEXELS_FALLBACK;
 
-  // Helper function to format price display based on pricing type
   const formatPriceDisplay = () => {
     const price = service.price;
-    const pricingType = service.pricing_type || "fixed"; // Default to fixed if not set
+    const pricingType = service.pricing_type || "fixed";
 
     switch (pricingType) {
       case "hourly":
-        return {
-          label: `GH₵${price}/hour`,
-          icon: Clock,
-          suffix: "",
-        };
+        return { label: `GH₵${price}/hour`, icon: Clock, suffix: "" };
       case "negotiable":
         return {
           label: `From GH₵${price}`,
@@ -64,21 +69,21 @@ export function ProviderServiceCard({
         };
       case "fixed":
       default:
-        return {
-          label: `GH₵${price}`,
-          icon: DollarSign,
-          suffix: " fixed",
-        };
+        return { label: `GH₵${price}`, icon: DollarSign, suffix: " fixed" };
     }
   };
 
   const priceDisplay = formatPriceDisplay();
   const PriceIcon = priceDisplay.icon;
 
+  const hasRating = service.avg_rating && service.avg_rating > 0;
+  const ratingDisplay = hasRating ? service.avg_rating?.toFixed(1) : "New";
+  const reviewCount = service.total_reviews || 0;
+  const bookingsCount = service.total_bookings || 0;
+
   return (
     <Card className="rounded-2xl overflow-hidden hover:shadow-lg transition-all duration-300 group flex flex-col justify-between">
       <div>
-        {/* Image Display frame */}
         <div className="relative h-48 bg-muted w-full">
           <Image
             src={imageUrl}
@@ -100,7 +105,6 @@ export function ProviderServiceCard({
           </div>
         </div>
 
-        {/* Info Wrapper Body */}
         <div className="p-4 space-y-2">
           <h3 className="font-semibold text-foreground line-clamp-1">
             {service.title}
@@ -118,18 +122,23 @@ export function ProviderServiceCard({
                 {priceDisplay.suffix}
               </span>
             </div>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <div className="flex items-center gap-0.5">
+                <StarIcon className="w-3.5 h-3.5 text-amber-400" />
+                <span className="font-medium">{ratingDisplay}</span>
+                {reviewCount > 0 && (
+                  <span className="text-muted-foreground/70 ml-0.5">
+                    ({reviewCount})
+                  </span>
+                )}
+              </div>
+              <span>·</span>
               <span>
-                {service.avg_rating && service.avg_rating > 0
-                  ? service.avg_rating.toFixed(1)
-                  : "New"}
+                {bookingsCount} booking{bookingsCount !== 1 ? "s" : ""}
               </span>
-              <span>· {service.total_bookings || 0} bookings</span>
             </div>
           </div>
 
-          {/* Pricing type badge */}
           <div className="flex items-center gap-1.5 mt-1">
             <PriceIcon className="w-3 h-3 text-muted-foreground" />
             <span className="text-xs text-muted-foreground capitalize">
@@ -138,8 +147,8 @@ export function ProviderServiceCard({
           </div>
 
           {service.rejection_reason && service.status === "rejected" && (
-            <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-              <p className="text-xs text-red-600 dark:text-red-400 line-clamp-2">
+            <div className="mt-2 p-2 rounded-lg bg-destructive/10 border border-destructive/20">
+              <p className="text-xs text-destructive line-clamp-2">
                 <span className="font-medium">Rejection reason: </span>
                 {service.rejection_reason}
               </p>
@@ -148,7 +157,6 @@ export function ProviderServiceCard({
         </div>
       </div>
 
-      {/* Item Mutation Controls */}
       <div className="p-4 pt-0 border-t border-border/50 mt-4 flex items-center justify-between gap-2">
         <Button
           variant="outline"

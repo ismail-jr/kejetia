@@ -15,6 +15,7 @@ import { SaveButton } from "../components/save-btn";
 import { ProviderProfile } from "../components/provider-profile";
 import { ServiceMetadata } from "../components/service-matadata";
 import { PricingInfoBox } from "../components/pricing-info-box";
+import BookingModal from "@/components/booking/booking-modal";
 
 type PricingType = "fixed" | "hourly" | "negotiable";
 
@@ -36,6 +37,7 @@ export default function ServiceDetailPage() {
   const [service, setService] = useState<Service | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
 
   const loadServiceDetails = useCallback(async () => {
     if (!id) return;
@@ -181,111 +183,127 @@ export default function ServiceDetailPage() {
   const PriceIcon = getPriceIcon();
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      {/* Back Button */}
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Marketplace
-      </button>
+    <>
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Back Button */}
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Marketplace
+        </button>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column - Images & Description */}
-        <div className="lg:col-span-2 space-y-6">
-          <ImageGallery
-            images={service.images || []}
-            category={service.category}
-            pricingType={service.pricing_type || "fixed"}
-            PriceIcon={PriceIcon}
-          />
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column - Images & Description */}
+          <div className="lg:col-span-2 space-y-6">
+            <ImageGallery
+              images={service.images || []}
+              category={service.category}
+              pricingType={service.pricing_type || "fixed"}
+              PriceIcon={PriceIcon}
+            />
 
-          {/* Description */}
-          <div className="bg-card text-card-foreground border border-muted rounded-2xl p-6 space-y-4 shadow-sm">
-            <h2 className="text-xl font-bold text-foreground">
-              Service Description
-            </h2>
-            <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">
-              {service.description}
-            </p>
+            {/* Description */}
+            <div className="bg-card text-card-foreground border border-muted rounded-2xl p-6 space-y-4 shadow-sm">
+              <h2 className="text-xl font-bold text-foreground">
+                Service Description
+              </h2>
+              <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">
+                {service.description}
+              </p>
 
-            {/* Tags */}
-            {service.tags && service.tags.length > 0 && (
-              <div className="pt-2">
-                <h3 className="text-sm font-semibold text-foreground mb-2">
-                  Tags
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {service.tags.map((tag, idx) => (
-                    <span
-                      key={idx}
-                      className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full"
-                    >
-                      {tag}
-                    </span>
-                  ))}
+              {/* Tags */}
+              {service.tags && service.tags.length > 0 && (
+                <div className="pt-2">
+                  <h3 className="text-sm font-semibold text-foreground mb-2">
+                    Tags
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {service.tags.map((tag, idx) => (
+                      <span
+                        key={idx}
+                        className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column - Booking Card */}
+          <div className="space-y-6">
+            <div className="bg-card text-card-foreground border border-muted rounded-2xl p-6 shadow-md space-y-6 sticky top-6">
+              {/* Title & Price */}
+              <div className="space-y-2">
+                <h1 className="text-2xl font-black text-foreground">
+                  {service.title}
+                </h1>
+                <div className="flex items-center justify-between pt-1">
+                  <PriceDisplay
+                    price={
+                      typeof service.price === "number"
+                        ? service.price
+                        : parseFloat(service.price || "0")
+                    }
+                    pricingType={service.pricing_type || "fixed"}
+                    size="large"
+                  />
+                  <SaveButton isSaved={isSaved} onToggle={handleSaveToggle} />
                 </div>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* Right Column - Booking Card */}
-        <div className="space-y-6">
-          <div className="bg-card text-card-foreground border border-muted rounded-2xl p-6 shadow-md space-y-6 sticky top-6">
-            {/* Title & Price */}
-            <div className="space-y-2">
-              <h1 className="text-2xl font-black text-foreground">
-                {service.title}
-              </h1>
-              <div className="flex items-center justify-between pt-1">
-                <PriceDisplay
-                  price={
-                    typeof service.price === "number"
-                      ? service.price
-                      : parseFloat(service.price || "0")
-                  }
-                  pricingType={service.pricing_type || "fixed"}
-                  size="large"
-                />
-                <SaveButton isSaved={isSaved} onToggle={handleSaveToggle} />
-              </div>
-            </div>
+              <hr className="border-muted" />
 
-            <hr className="border-muted" />
+              {/* Provider Profile */}
+              <ProviderProfile
+                fullName={service.profiles?.full_name || "UCC Student"}
+                avatarUrl={service.profiles?.avatar_url}
+                phone={service.profiles?.phone}
+                location={service.profiles?.location}
+              />
 
-            {/* Provider Profile */}
-            <ProviderProfile
-              fullName={service.profiles?.full_name || "UCC Student"}
-              avatarUrl={service.profiles?.avatar_url}
-              phone={service.profiles?.phone}
-              location={service.profiles?.location}
-            />
+              {/* Metadata */}
+              <ServiceMetadata
+                status={service.status}
+                createdAt={service.created_at}
+              />
 
-            {/* Metadata */}
-            <ServiceMetadata
-              status={service.status}
-              createdAt={service.created_at}
-            />
+              {/* Pricing Info */}
+              <PricingInfoBox pricingType={service.pricing_type || "fixed"} />
 
-            {/* Pricing Info */}
-            <PricingInfoBox pricingType={service.pricing_type || "fixed"} />
-
-            {/* Book Button */}
-            <Button
-              asChild
-              size="lg"
-              className="w-full font-bold rounded-xl text-sm shadow-md py-6 active:scale-[0.99] transition"
-            >
-              <Link href={`/marketplace/bookings/new?serviceId=${service.id}`}>
+              {/* Book Button - Now opens modal instead of navigating */}
+              <Button
+                size="lg"
+                className="w-full font-bold rounded-xl text-sm shadow-md py-6 active:scale-[0.99] transition"
+                onClick={() => setIsBookingModalOpen(true)}
+              >
                 Book This Service
-              </Link>
-            </Button>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Booking Modal */}
+      {service && (
+        <BookingModal
+          isOpen={isBookingModalOpen}
+          onClose={() => setIsBookingModalOpen(false)}
+          serviceId={service.id}
+          serviceTitle={service.title}
+          providerId={service.provider_id}
+          servicePrice={
+            typeof service.price === "number"
+              ? service.price
+              : parseFloat(service.price || "0")
+          }
+        />
+      )}
+    </>
   );
 }

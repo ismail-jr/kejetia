@@ -21,6 +21,7 @@ import {
   Briefcase,
   MessageSquare,
   CheckCircle,
+  Loader2, // Imported the spinner loader
 } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/contexts/auth-context";
@@ -136,6 +137,7 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       {/* LEFT PANEL */}
@@ -285,13 +287,17 @@ export default function LoginPage() {
               )}
             </div>
 
+            {/* Accessible and context-safe loading submit state layout */}
             <Button
               type="submit"
-              className="w-full h-12 rounded-xl bg-gradient-to-r from-primary to-primary/90"
+              className="w-full h-12 rounded-xl bg-gradient-to-r from-primary to-primary/90 font-semibold"
               disabled={loading}
             >
               {loading ? (
-                "Signing in..."
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Signing in...
+                </span>
               ) : (
                 <span className="flex items-center justify-center gap-2">
                   Sign In <ArrowRight className="w-4 h-4" />

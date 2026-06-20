@@ -17,6 +17,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Bell,
   Menu,
   Sun,
@@ -57,6 +67,8 @@ export default function DashboardLayout({
   const { theme, setTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Security & Sync Guard for Workspace States
   useEffect(() => {
@@ -76,9 +88,6 @@ export default function DashboardLayout({
         router.replace(`/${activeRole}/dashboard`);
       }
     }
-
-    // NOTE: Keep this dependency array length exactly fixed at 5.
-    // We omit 'roles' and 'setActiveRole' to maintain a constant size between hydration cycles.
   }, [pathname, activeRole, isSwitching, router, loading]);
 
   if (loading) {
@@ -98,8 +107,18 @@ export default function DashboardLayout({
       .slice(0, 2) || "U";
 
   const handleSignOut = async () => {
-    await signOut();
-    router.push("/");
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+      toast.success("Signed out successfully");
+      router.push("/");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to disconnect system profile securely.");
+    } finally {
+      setIsLoggingOut(false);
+      setIsLogoutDialogOpen(false);
+    }
   };
 
   const handleSwitchRole = async (role: "student" | "provider" | "admin") => {
@@ -112,8 +131,7 @@ export default function DashboardLayout({
       toast.success(`Switched view to ${role} workspace`);
     } catch (err) {
       toast.error("Failed to swap operational scopes");
-    }
-    {
+    } finally {
       setIsSwitching(false);
     }
   };
@@ -300,8 +318,12 @@ export default function DashboardLayout({
 
             <DropdownMenuSeparator />
 
+            {/* Changed from direct call to controlled Dialog state activation */}
             <DropdownMenuItem
-              onClick={handleSignOut}
+              onSelect={(e) => {
+                e.preventDefault(); // Prevents menu closure disrupting dialog alignment
+                setIsLogoutDialogOpen(true);
+              }}
               className="text-destructive focus:text-destructive focus:bg-destructive/5 cursor-pointer font-semibold text-xs py-2"
             >
               <LogOut className="mr-2 h-4 w-4" />
@@ -373,6 +395,49 @@ export default function DashboardLayout({
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
+
+      {/* Global Context Confirmation Dialog Markup */}
+      <AlertDialog
+        open={isLogoutDialogOpen}
+        onOpenChange={setIsLogoutDialogOpen}
+      >
+        <AlertDialogContent className="rounded-2xl max-w-[380px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-heading font-bold">
+              Confirm Sign Out
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm">
+              Are you sure you want to log out of your profile session? You will
+              need to log back in to access your portal.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel
+              disabled={isLoggingOut}
+              className="rounded-xl font-semibold text-xs"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleSignOut();
+              }}
+              disabled={isLoggingOut}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-xl font-semibold text-xs"
+            >
+              {isLoggingOut ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
+                  Leaving...
+                </>
+              ) : (
+                "Sign Out"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

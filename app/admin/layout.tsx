@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   { label: "Reports", href: "/admin/reports", icon: AlertTriangle },
   { label: "Analytics", href: "/admin/analytics", icon: BarChart2 },
   { label: "Notifications", href: "/admin/notifications", icon: Bell },
-  { label: "Settings", href: "/admin/settings", icon: Settings },
+  // { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
 export default function AdminLayout({

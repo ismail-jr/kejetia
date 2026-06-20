@@ -41,7 +41,7 @@ export default function ProviderLayout({
   useEffect(() => {
     if (!loading) {
       if (!user) router.push("/login");
-      else if (profile && profile.role === "admin")
+      else if (profile && profile.active_role === "admin")
         router.push("/admin/dashboard");
     }
   }, [user, profile, loading, router]);

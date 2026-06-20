@@ -38,7 +38,9 @@ export default function StudentLayout({
     if (
       !loading &&
       (!user ||
-        (profile && profile.role !== "student" && profile.role !== "provider"))
+        (profile &&
+          profile.active_role !== "student" &&
+          profile.active_role !== "provider"))
     ) {
       if (!user) router.push("/login");
     }

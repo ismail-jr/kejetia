@@ -10,32 +10,22 @@ import { toast } from "sonner";
 import { Plus, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ServiceStats } from "./components/service-stats";
-import type { Database } from "@/lib/database.types";
 import { ProviderServiceCard } from "./components/service-card";
 import { EditServiceModal } from "./components/edit-modal";
-
-type Service = Database["public"]["Tables"]["services"]["Row"];
-type FilterType = "all" | "approved" | "pending" | "rejected" | "archived";
-
-interface EditFormState {
-  id?: string;
-  title: string;
-  description: string;
-  category: string;
-  pricing_type: "fixed" | "hourly" | "negotiable";
-  price: number;
-  tags: string[];
-  images: string[];
-  status?: string;
-}
+import type {
+  ServiceWithReviews,
+  FilterType,
+  EditFormState,
+} from "./components/types";
 
 export default function ProviderServicesPage() {
   const { user } = useAuth();
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<ServiceWithReviews[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterType>("all");
 
-  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [editingService, setEditingService] =
+    useState<ServiceWithReviews | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState<EditFormState>({
@@ -50,15 +40,49 @@ export default function ProviderServicesPage() {
 
   const fetchServices = useCallback(async () => {
     if (!user) return;
+    setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Fetch all services with their review data (already in the table)
+      const { data: servicesData, error: servicesError } = await supabase
         .from("services")
         .select("*")
         .eq("provider_id", user.id)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      if (data) setServices(data);
+      if (servicesError) throw servicesError;
+
+      if (!servicesData || servicesData.length === 0) {
+        setServices([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch real booking counts from bookings table
+      const serviceIds = servicesData.map((s) => s.id);
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from("bookings")
+        .select("service_id")
+        .in("service_id", serviceIds)
+        .neq("status", "cancelled");
+
+      if (bookingsError) throw bookingsError;
+
+      // Calculate booking counts
+      const bookingCountMap = new Map<string, number>();
+      bookingsData?.forEach((b) => {
+        bookingCountMap.set(
+          b.service_id,
+          (bookingCountMap.get(b.service_id) || 0) + 1,
+        );
+      });
+
+      // Combine all data
+      const servicesWithData: ServiceWithReviews[] = servicesData.map((s) => ({
+        ...s,
+        total_bookings: bookingCountMap.get(s.id) ?? 0,
+      }));
+
+      setServices(servicesWithData);
     } catch (error) {
       console.error("Fetch data exception:", error);
       toast.error("Could not fetch your services data");
@@ -99,14 +123,15 @@ export default function ProviderServicesPage() {
     }
   };
 
-  const openEditDialog = (service: Service) => {
+  const openEditDialog = (service: ServiceWithReviews) => {
     setEditingService(service);
     setEditForm({
       id: service.id,
       title: service.title,
       description: service.description || "",
       category: service.category,
-      pricing_type: (service.pricing_type as any) || "fixed",
+      pricing_type:
+        (service.pricing_type as "fixed" | "hourly" | "negotiable") || "fixed",
       price: service.price,
       tags: service.tags || [],
       images: service.images || [],
@@ -141,9 +166,9 @@ export default function ProviderServicesPage() {
 
       if (error) throw error;
 
-      setServices((prev) =>
-        prev.map((s) => (s.id === editingService.id ? data : s)),
-      );
+      // Refresh services to get updated data
+      await fetchServices();
+
       toast.success("Service updated successfully! It will be reviewed again.");
       setEditDialogOpen(false);
       setEditingService(null);
@@ -284,7 +309,6 @@ export default function ProviderServicesPage() {
         onSubmit={handleEditSubmit}
         isSubmitting={editing}
         onDeleteSuccess={() => {
-          // Refresh the services list after deletion
           fetchServices();
         }}
       />

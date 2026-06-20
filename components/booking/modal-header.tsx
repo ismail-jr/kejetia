@@ -15,11 +15,9 @@ export function BookingModalHeader({
     <div className="p-6 border-b border-border flex items-center justify-between bg-muted/10">
       <div>
         <h3 className="font-heading font-bold text-lg text-foreground truncate max-w-[340px] sm:max-w-md">
-          {step === 4 ? "Reservation Logged!" : `Book ${serviceTitle}`}
+          {step === 4 ? "Complete!" : `Book ${serviceTitle}`}
         </h3>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Step {step} of 4 — Setup variables and parameters
-        </p>
+        <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 4</p>
       </div>
       {step < 4 && (
         <button

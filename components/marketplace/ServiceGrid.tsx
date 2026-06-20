@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Heart, Clock, DollarSign, TrendingUp } from "lucide-react";
+import { Heart, Clock, DollarSign, TrendingUp, Star } from "lucide-react";
 import Link from "next/link";
 import BookingModal from "../booking/booking-modal";
 
@@ -161,11 +161,22 @@ function ServiceCard({
   const detailsUrl = `/student/browse/${service.id}`;
   const pricingType = service.pricing_type || "fixed";
 
+  // Parse rating and review count
   const rating = service.avg_rating
     ? parseFloat(String(service.avg_rating))
     : 0;
-  const ratingDisplay = rating > 0 ? rating.toFixed(1) : "New";
-  const bookingsCount = service.total_bookings || 0;
+  const hasRating = rating > 0;
+  const reviewCount = Number(service.total_reviews || 0);
+
+  // Determine rating label
+  const getRatingLabel = () => {
+    if (!hasRating) return "No reviews yet";
+    if (rating >= 4.5) return "Outstanding";
+    if (rating >= 4.0) return "Great";
+    if (rating >= 3.0) return "Good";
+    if (rating >= 2.0) return "Average";
+    return "Poor";
+  };
 
   return (
     <div className="bg-card text-card-foreground border border-muted rounded-xl overflow-hidden shadow-sm hover:shadow-md transition flex flex-col h-full relative">
@@ -175,6 +186,10 @@ function ServiceCard({
           alt={service.title}
           className="object-cover w-full h-full"
           loading="lazy"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src =
+              "/images/placeholder-service.jpg";
+          }}
         />
 
         <button
@@ -228,13 +243,37 @@ function ServiceCard({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>⭐ {ratingDisplay}</span>
-            <span>•</span>
-            <span>
-              {bookingsCount} booking{bookingsCount !== 1 ? "s" : ""}
-            </span>
+          {/* Rating and Reviews Row */}
+          <div className="flex items-center gap-2 text-xs">
+            {hasRating ? (
+              <>
+                <div className="flex items-center gap-1 bg-muted/50 px-2 py-0.5 rounded-full">
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span className="font-medium text-foreground">
+                    {rating.toFixed(1)}
+                  </span>
+                </div>
+                {reviewCount > 0 && (
+                  <span className="text-muted-foreground text-[10px]">
+                    ({reviewCount} review{reviewCount !== 1 ? "s" : ""})
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-muted-foreground/80 italic text-[11px] bg-muted/40 px-2 py-0.5 rounded-md">
+                No reviews yet
+              </span>
+            )}
           </div>
+        </div>
+
+        {/* Dynamic Quality Rating Tagline */}
+        <div className="flex items-center justify-between">
+          <span
+            className={`text-[10px] font-medium ${!hasRating ? "text-muted-foreground/60 italic" : "text-muted-foreground"}`}
+          >
+            {getRatingLabel()}
+          </span>
         </div>
 
         <div className="flex items-center justify-between pt-1">
