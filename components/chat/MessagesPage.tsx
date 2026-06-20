@@ -215,7 +215,7 @@ export default function MessagesPage() {
                 )}
               >
                 <Avatar className="w-10 h-10 flex-shrink-0">
-                  <AvatarImage src={conv.participant.avatar_url} />
+                  <AvatarImage src={conv.participant.avatar_url || undefined} />{" "}
                   <AvatarFallback className="bg-primary text-white text-sm font-bold">
                     {partnerInitials(conv.participant)}
                   </AvatarFallback>
@@ -280,7 +280,7 @@ export default function MessagesPage() {
                 ←
               </button>
               <Avatar className="w-9 h-9">
-                <AvatarImage src={activePartner.avatar_url} />
+                <AvatarImage src={activePartner.avatar_url || undefined} />{" "}
                 <AvatarFallback className="bg-primary text-white text-sm font-bold">
                   {partnerInitials(activePartner)}
                 </AvatarFallback>
@@ -290,7 +290,7 @@ export default function MessagesPage() {
                   {activePartner.full_name}
                 </p>
                 <p className="text-xs text-muted-foreground capitalize">
-                  {activePartner.role}
+                  {activePartner.active_role}{" "}
                 </p>
               </div>
             </div>

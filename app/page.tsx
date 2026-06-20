@@ -146,7 +146,7 @@ export default function LandingPage() {
 
   const handleGetStarted = () => {
     if (user && profile) {
-      router.push(`/${profile.role}/dashboard`);
+      router.push(`/${profile.active_role}/dashboard`);
     } else {
       router.push("/register");
     }
