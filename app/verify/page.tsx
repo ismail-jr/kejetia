@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -10,7 +10,8 @@ import { Mail, ArrowRight, RefreshCw, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/contexts/auth-context";
 
-export default function VerifyPage() {
+// 1. Move your main component layout and hook logic here
+function VerifyPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { verifyOtp } = useAuth();
@@ -80,21 +81,13 @@ export default function VerifyPage() {
     }
     setLoading(true);
     try {
-      // 1. Core OTP validation call
       await verifyOtp(email, token);
-
-      // 2. Immediately switch to the loading transition screen
       setIsVerified(true);
       toast.success("Email verified successfully! Please sign in.");
 
-      // 3. CRITICAL FIX: Kill the auto-generated background session immediately
-      // This stops dashboard layout contexts from flashing or mounting ahead of time
       await supabase.auth.signOut();
-
-      // Clear the Next.js App Router layout cache
       router.refresh();
 
-      // 4. Safely redirect back to login page with pre-filled email
       setTimeout(() => {
         router.replace(`/login?email=${encodeURIComponent(email)}`);
       }, 1000);
@@ -123,7 +116,6 @@ export default function VerifyPage() {
     }
   };
 
-  // Safe intermediate layout transition state
   if (isVerified) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
@@ -252,5 +244,23 @@ export default function VerifyPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// 2. Wrap your content inside a clean Suspense Boundary for Next's compiler
+export default function VerifyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-muted-foreground text-sm font-medium">
+            Loading verification systems...
+          </p>
+        </div>
+      }
+    >
+      <VerifyPageContent />
+    </Suspense>
   );
 }
