@@ -256,7 +256,7 @@ export default function LoginPage() {
                 <Label htmlFor="password" className="text-sm font-medium">
                   Password
                 </Label>
-                //TODO Implement forgot password
+                {/* //TODO Implement forgot password */}
                 {/* <Link
                   href="/forgot-password"
                   className="text-xs text-primary hover:underline"
