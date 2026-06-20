@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 5000;
 // 1. Production CORS configuration
 const allowedOrigins = [
   "http://localhost:3000", // For local frontend development
-  "https://kejetia-peers.vercel.app/", // Your live production Vercel frontend
+  "https://kejetia-peers.vercel.app", // Your live production Vercel frontend
 ];
 
 app.use(
