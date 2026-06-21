@@ -1,14 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Star, ArrowRight } from "lucide-react";
+import { Star } from "lucide-react";
 
 interface Testimonial {
   id: string;
@@ -223,15 +221,6 @@ export function TestimonialsSection() {
             </motion.div>
           ))}
         </motion.div>
-
-        <div className="text-center mt-10">
-          <Button variant="ghost" className="gap-2" asChild>
-            <Link href="/reviews">
-              Read All Reviews
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </Button>
-        </div>
       </div>
     </section>
   );

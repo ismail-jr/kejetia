@@ -11,6 +11,12 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Mail,
   Phone,
   MapPin,
@@ -371,6 +377,13 @@ export default function ContactPage() {
                 Quick answers to common questions
               </motion.p>
             </motion.div>
+
+            {/* Each FAQ is now a Card wrapping a single AccordionItem, so the
+                existing per-card entrance stagger (fade/scale-in as the
+                section scrolls into view) is untouched — only the card's
+                inner content became collapsible. type="single" + collapsible
+                means exactly one panel is open at a time, and clicking the
+                open one closes it. defaultValue opens the first FAQ on load. */}
             <motion.div
               className="space-y-4"
               initial="hidden"
@@ -378,18 +391,30 @@ export default function ContactPage() {
               viewport={{ once: true, amount: 0.2 }}
               variants={gridContainer}
             >
-              {FAQS.map((faq, index) => (
-                <motion.div key={index} variants={itemVariants}>
-                  <Card className="p-6 bg-card border-border hover:shadow-md transition-all">
-                    <h3 className="font-semibold text-foreground mb-2">
-                      {faq.question}
-                    </h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {faq.answer}
-                    </p>
-                  </Card>
-                </motion.div>
-              ))}
+              <Accordion
+                type="single"
+                collapsible
+                defaultValue="faq-0"
+                className="space-y-4"
+              >
+                {FAQS.map((faq, index) => (
+                  <motion.div key={index} variants={itemVariants}>
+                    <Card className="bg-card border-border hover:shadow-md transition-all overflow-hidden">
+                      <AccordionItem
+                        value={`faq-${index}`}
+                        className="border-none"
+                      >
+                        <AccordionTrigger className="px-6 py-4 text-left font-semibold text-foreground hover:no-underline [&>svg]:text-primary">
+                          {faq.question}
+                        </AccordionTrigger>
+                        <AccordionContent className="px-6 pb-4 text-sm text-muted-foreground leading-relaxed">
+                          {faq.answer}
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Card>
+                  </motion.div>
+                ))}
+              </Accordion>
             </motion.div>
           </div>
         </section>
@@ -407,7 +432,7 @@ export default function ContactPage() {
               variants={itemVariants}
               className="text-3xl font-bold text-foreground mb-4"
             >
-              Still have questions? 🤔
+              Still have questions?
             </motion.h2>
             <motion.p
               variants={itemVariants}

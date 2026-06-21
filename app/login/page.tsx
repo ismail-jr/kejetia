@@ -21,7 +21,7 @@ import {
   Briefcase,
   MessageSquare,
   CheckCircle,
-  Loader2, // Imported the spinner loader
+  Loader2,
 } from "lucide-react";
 import Image from "next/image";
 import { useAuth } from "@/contexts/auth-context";
@@ -78,9 +78,7 @@ export default function LoginPage() {
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
-
     const email = data.email.toLowerCase();
-
     const isUccEmail =
       email.endsWith("@stu.ucc.edu.gh") || email.endsWith("@ucc.edu.gh");
 
@@ -111,7 +109,6 @@ export default function LoginPage() {
           type: "manual",
           message: "Use UCC email or admin account",
         });
-
         await signOut();
         return;
       }
@@ -119,7 +116,6 @@ export default function LoginPage() {
       toast.success("Login successful");
 
       let path = "/login";
-
       if (isAdmin) {
         path = "/admin/dashboard";
       } else if (multipleRoles) {
@@ -140,29 +136,38 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
-      {/* LEFT PANEL */}
+      {/* LEFT PANEL (Desktop View) */}
       <div className="hidden lg:flex relative overflow-hidden flex-col justify-between p-10 xl:p-14 bg-gradient-to-br from-primary/95 via-primary/90 to-primary/80 text-white">
         <div className="absolute inset-0 opacity-30">
           <div className="absolute top-20 -left-20 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse" />
           <div className="absolute bottom-10 -right-20 w-96 h-96 bg-primary-foreground/10 rounded-full blur-3xl animate-pulse delay-1000" />
         </div>
 
-        <Link href="/" className="relative z-10 flex items-center gap-3 group">
-          <div className="relative w-12 h-12">
-            <Image
-              src="/images/logo.png"
-              alt="Kejetia Logo"
-              fill
-              sizes="(max-w-768px) 100vw, 33vw"
-              className="object-contain rounded-xl bg-white backdrop-blur-sm p-2 group-hover:scale-105 transition-transform"
-            />
-          </div>
-          <div>
-            <span className="font-bold text-xl tracking-tight">Kejetia</span>
-          </div>
-        </Link>
+        {/* LOGO FOR DESKTOP SCREENS */}
+        <div className="relative z-10 w-full max-w-md self-start">
+          <Link href="/" className="inline-flex items-center gap-2.5 group">
+            <div className="relative w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm">
+              <Image
+                src="/images/logo.png"
+                alt="Kejetia Logo"
+                fill
+                sizes="36px"
+                className="object-contain rounded-xl p-1 group-hover:scale-105 transition-transform"
+              />
+            </div>
+            <div className="text-left">
+              <span className="font-bold text-base tracking-tight text-white block leading-none mb-0.5">
+                Kejetia
+              </span>
+              <p className="text-[10px] text-white/70 leading-none">
+                Campus Marketplace
+              </p>
+            </div>
+          </Link>
+        </div>
 
-        <div className="relative z-10 space-y-8">
+        {/* Features Content */}
+        <div className="relative z-10 space-y-8 mt-6">
           <div className="space-y-4">
             <h1 className="text-4xl xl:text-5xl font-bold leading-tight">
               Your campus marketplace{" "}
@@ -213,9 +218,32 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* RIGHT PANEL - Form UI */}
+      {/* RIGHT PANEL (Form Layout & Small Screen Logo) */}
       <div className="flex items-center justify-center p-6 lg:p-12">
         <div className="w-full max-w-md space-y-8">
+          {/* LOGO FOR SMALL SCREENS ONLY (Hidden when left panel displays) */}
+          <div className="w-full lg:hidden mb-4">
+            <Link href="/" className="inline-flex items-center gap-2.5 group">
+              <div className="relative w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-sm">
+                <Image
+                  src="/images/logo.png"
+                  alt="Kejetia Logo"
+                  fill
+                  sizes="36px"
+                  className="object-contain rounded-xl bg-white p-1 group-hover:scale-105 transition-transform"
+                />
+              </div>
+              <div className="text-left">
+                <span className="font-bold text-base tracking-tight text-foreground block leading-none mb-0.5">
+                  Kejetia
+                </span>
+                <p className="text-[10px] text-muted-foreground leading-none">
+                  Campus Marketplace
+                </p>
+              </div>
+            </Link>
+          </div>
+
           <div className="space-y-2">
             <h1 className="text-3xl font-bold tracking-tight">Welcome back</h1>
             <p className="text-muted-foreground">
@@ -256,13 +284,6 @@ export default function LoginPage() {
                 <Label htmlFor="password" className="text-sm font-medium">
                   Password
                 </Label>
-                {/* //TODO Implement forgot password */}
-                {/* <Link
-                  href="/forgot-password"
-                  className="text-xs text-primary hover:underline"
-                >
-                  Forgot password?
-                </Link> */}
               </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -288,7 +309,6 @@ export default function LoginPage() {
               )}
             </div>
 
-            {/* Accessible and context-safe loading submit state layout */}
             <Button
               type="submit"
               className="w-full h-12 rounded-xl bg-gradient-to-r from-primary to-primary/90 font-semibold"

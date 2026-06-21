@@ -82,11 +82,18 @@ export function Navbar() {
 
   return (
     <>
+      {/* Navbar surface now uses `bg-card` instead of `bg-background` —
+          --color-background (98% lightness) and --color-card (100%) were
+          close enough that the navbar visually merged into the page on
+          light backgrounds. The border now derives from `foreground` at
+          low opacity rather than the (fairly pale) `border` token, and the
+          shadow is a touch stronger, so the navbar reads as its own raised
+          surface instead of blending into whatever section sits behind it. */}
       <header
         className={`fixed top-0 z-50 w-full transition-all duration-300 ${
           scrolled
-            ? "bg-background/95 backdrop-blur-xl shadow-md border-b border-border/40"
-            : "bg-background/80 backdrop-blur-md border-b border-border/20"
+            ? "bg-card/90 backdrop-blur-xl shadow-[0_2px_16px_-4px_rgba(0,0,0,0.1)] border-b border-foreground/10"
+            : "bg-card/70 backdrop-blur-md border-b border-foreground/[0.06]"
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -254,7 +261,7 @@ export function Navbar() {
           />
 
           <div className="fixed top-16 left-0 right-0 bottom-0 z-40 lg:hidden animate-in slide-in-from-top duration-300">
-            <div className="bg-background border-t border-border/20 h-full overflow-y-auto shadow-xl">
+            <div className="bg-card border-t border-foreground/10 h-full overflow-y-auto shadow-xl">
               <nav className="flex flex-col p-4 gap-1.5">
                 {/* Loading placeholder (mobile) */}
                 {loading && (

@@ -8,7 +8,11 @@
   --font-body: var(--font-body);
 
   /* Background & Text */
-  --color-background: hsl(220 33% 98%);
+  /* Lightness dropped from 98% to 94% — at 98% this sat only 2 points away
+     from --color-card (100%), which is why the navbar (using bg-card)
+     barely separated from the page behind it. A 6-point gap gives real,
+     visible contrast while staying a clean off-white rather than grey. */
+  --color-background: hsl(220 25% 94%);
   --color-foreground: hsl(220 40% 12%);
 
   /* Cards */
@@ -32,7 +36,7 @@
   --color-accent-foreground: hsl(343 78% 30%);
 
   /* Muted UI Elements */
-  --color-muted: hsl(220 20% 95%);
+  --color-muted: hsl(220 20% 91%);
   --color-muted-foreground: hsl(220 12% 46%);
 
   /* Status Colors */
@@ -46,8 +50,8 @@
   --color-destructive-foreground: hsl(0 0% 100%);
 
   /* Borders & Inputs */
-  --color-border: hsl(220 18% 90%);
-  --color-input: hsl(220 18% 90%);
+  --color-border: hsl(220 18% 86%);
+  --color-input: hsl(220 18% 86%);
   --color-ring: hsl(343 78% 36%);
 
   /* Radius */
@@ -64,14 +68,19 @@
   --chart-2: oklch(0.75 0.15 70);
 
   /* Background */
-  --color-background: hsl(222 47% 7%);
+  /* Lightness dropped from 7% to 4% — at 7% this sat only 4 points from
+     --color-card (11%), which is why the navbar (using bg-card) barely
+     separated from the page behind it. Dark mode needs a wider relative
+     gap than light mode since the eye is less sensitive to small
+     luminance differences at low brightness. */
+  --color-background: hsl(222 50% 4%);
   --color-foreground: hsl(210 40% 96%);
 
   /* Cards */
-  --color-card: hsl(222 35% 11%);
+  --color-card: hsl(222 32% 13%);
   --color-card-foreground: hsl(210 40% 96%);
 
-  --color-popover: hsl(222 35% 11%);
+  --color-popover: hsl(222 32% 13%);
   --color-popover-foreground: hsl(210 40% 96%);
 
   /* Crimson */
@@ -87,7 +96,7 @@
   --color-accent-foreground: hsl(343 50% 92%);
 
   /* Muted */
-  --color-muted: hsl(222 25% 15%);
+  --color-muted: hsl(222 25% 17%);
   --color-muted-foreground: hsl(215 15% 65%);
 
   /* Status */
@@ -101,8 +110,8 @@
   --color-destructive-foreground: hsl(0 0% 100%);
 
   /* Borders */
-  --color-border: hsl(222 20% 20%);
-  --color-input: hsl(222 20% 20%);
+  --color-border: hsl(222 22% 24%);
+  --color-input: hsl(222 22% 24%);
   --color-ring: hsl(343 70% 55%);
 }
 
