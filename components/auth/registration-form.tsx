@@ -1,12 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { LoadingButton } from "@/components/auth/loading-button";
 import {
   Mail,
@@ -18,6 +25,7 @@ import {
   BookOpen,
   Briefcase,
   PlusCircle,
+  HelpCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
@@ -122,6 +130,28 @@ export function RegistrationForm() {
 
   return (
     <div className="w-full max-w-md space-y-6">
+      <div className="w-full max-w-md lg:hidden mb-8 self-start">
+        <Link href="/" className="inline-flex items-center gap-2.5 group">
+          <div className="relative w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-sm">
+            <Image
+              src="/images/logo.png"
+              alt="Kejetia Logo"
+              fill
+              sizes="36px"
+              className="object-contain rounded-xl bg-white p-1 group-hover:scale-105 transition-transform"
+            />
+          </div>
+          <div className="text-left">
+            <span className="font-bold text-base tracking-tight text-foreground block leading-none mb-0.5">
+              Kejetia
+            </span>
+            <p className="text-[10px] text-muted-foreground leading-none">
+              Campus Marketplace
+            </p>
+          </div>
+        </Link>
+      </div>
+
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">
           {isAddingSecondaryRole ? "Unlock secondary role" : "Create account"}
@@ -134,41 +164,77 @@ export function RegistrationForm() {
       </div>
 
       {/* Role Selection Blocks */}
-      <div className="grid grid-cols-2 gap-3">
-        {[
-          {
-            id: "student",
-            label: "Student (Receiver)",
-            icon: BookOpen,
-            description: "Browse & discover services",
-          },
-          {
-            id: "provider",
-            label: "Provider (Seller)",
-            icon: Briefcase,
-            description: "Offer your skills",
-          },
-        ].map(({ id, label, icon: Icon, description }) => (
-          <button
-            key={id}
-            type="button"
-            disabled={isAddingSecondaryRole && role === id}
-            onClick={() => selectRole(id as any)}
-            className={`p-4 rounded-xl border-2 transition-all text-left ${
-              role === id
-                ? "border-primary bg-primary/5 shadow-sm"
-                : "border-border hover:border-primary/30"
-            } ${isAddingSecondaryRole && role !== id ? "animate-pulse border-dashed border-orange-400" : ""}`}
-          >
-            <Icon
-              className={`w-5 h-5 mb-2 ${role === id ? "text-primary" : "text-muted-foreground"}`}
-            />
-            <p className="font-semibold text-sm">{label}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {description}
-            </p>
-          </button>
-        ))}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium text-foreground">
+            Choose your role
+          </span>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="What's the difference between Student and Provider?"
+                  className="relative flex items-center justify-center w-4 h-4 rounded-full text-muted-foreground hover:text-primary transition-colors"
+                >
+                  {/* Subtle pulse ring drawing the eye to the help icon */}
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-primary/30 animate-ping" />
+                  <HelpCircle className="relative w-4 h-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start" className="w-64">
+                <p className="mb-1.5">
+                  <span className="font-semibold">Student</span> — browse and
+                  book services offered by other students.
+                </p>
+                <p>
+                  <span className="font-semibold">Provider</span> — list your
+                  own skills or services for others to book.
+                </p>
+                <p className="mt-1.5 text-muted-foreground">
+                  You can add the other role to your account later.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            {
+              id: "student",
+              label: "Student (Receiver)",
+              icon: BookOpen,
+              description: "Browse & discover services",
+            },
+            {
+              id: "provider",
+              label: "Provider (Seller)",
+              icon: Briefcase,
+              description: "Offer your skills",
+            },
+          ].map(({ id, label, icon: Icon, description }) => (
+            <button
+              key={id}
+              type="button"
+              disabled={isAddingSecondaryRole && role === id}
+              onClick={() => selectRole(id as any)}
+              className={`p-4 rounded-xl border-2 transition-all text-left ${
+                role === id
+                  ? "border-primary bg-primary/5 shadow-sm"
+                  : "border-border hover:border-primary/30"
+              } ${isAddingSecondaryRole && role !== id ? "animate-pulse border-dashed border-orange-400" : ""}`}
+            >
+              <Icon
+                className={`w-5 h-5 mb-2 ${role === id ? "text-primary" : "text-muted-foreground"}`}
+              />
+              <p className="font-semibold text-sm">{label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {description}
+              </p>
+            </button>
+          ))}
+        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
