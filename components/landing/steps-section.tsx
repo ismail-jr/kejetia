@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, GraduationCap, Search, TrendingUp } from "lucide-react";
@@ -32,29 +33,127 @@ interface StepsSectionProps {
   onGetStarted: () => void;
 }
 
+// Header (badge + heading + paragraph) staggers in as one group.
+const headerContainer = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.2, delayChildren: 0.1 },
+  },
+};
+
+// Steps stagger in as their own group, once in view.
+const stepsContainer = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.25, delayChildren: 0.1 },
+  },
+};
+
+const headerItemVariants = {
+  hidden: { opacity: 0, scale: 0.92, y: 18 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.7,
+      ease: [0.16, 1, 0.3, 1] as const,
+    },
+  },
+};
+
+// Each step pops in with a slightly bigger "punch" since there are only 3.
+const stepVariants = {
+  hidden: { opacity: 0, scale: 0.85, y: 24 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.7,
+      ease: [0.16, 1, 0.3, 1] as const,
+    },
+  },
+};
+
+// Connecting line draws in from left to right after its step pops in.
+const lineVariants = {
+  hidden: { scaleX: 0, opacity: 0 },
+  visible: {
+    scaleX: 1,
+    opacity: 1,
+    transition: {
+      duration: 0.6,
+      ease: [0.16, 1, 0.3, 1] as const,
+      delay: 0.3,
+    },
+  },
+};
+
+const ctaVariants = {
+  hidden: { opacity: 0, scale: 0.9, y: 18 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.7,
+      ease: [0.16, 1, 0.3, 1] as const,
+    },
+  },
+};
+
 export function StepsSection({ onGetStarted }: StepsSectionProps) {
   return (
     <section className="py-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <Badge className="mb-6 px-4 py-1.5 text-sm font-medium bg-primary/10 text-primary border-primary/20 pointer-events-none">
-            Simple Process
-          </Badge>
-          <h2 className="text-3xl lg:text-4xl font-heading mb-4 tracking-tight">
+        <motion.div
+          className="text-center mb-12"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.4 }}
+          variants={headerContainer}
+        >
+          <motion.div variants={headerItemVariants}>
+            <Badge className="mb-6 px-4 py-1.5 text-sm font-medium bg-primary/10 text-primary border-primary/20 pointer-events-none">
+              Simple Process
+            </Badge>
+          </motion.div>
+          <motion.h2
+            variants={headerItemVariants}
+            className="text-3xl lg:text-4xl font-heading mb-4 tracking-tight"
+          >
             How UCC Connect Works
-          </h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto font-body">
+          </motion.h2>
+          <motion.p
+            variants={headerItemVariants}
+            className="text-muted-foreground max-w-2xl mx-auto font-body"
+          >
             Get started in minutes with our simple three-step process
-          </p>
-        </div>
+          </motion.p>
+        </motion.div>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <motion.div
+          className="grid md:grid-cols-3 gap-8"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.3 }}
+          variants={stepsContainer}
+        >
           {STEPS.map((step, idx) => {
             const Icon = step.icon;
             return (
-              <div key={idx} className="relative">
+              <motion.div
+                key={idx}
+                variants={stepVariants}
+                className="relative"
+              >
                 {idx < STEPS.length - 1 && (
-                  <div className="hidden md:block absolute top-1/3 left-full w-full h-0.5 bg-gradient-to-r from-primary/20 to-transparent -translate-y-1/2" />
+                  <motion.div
+                    variants={lineVariants}
+                    style={{ transformOrigin: "left center" }}
+                    className="hidden md:block absolute top-1/3 left-full w-full h-0.5 bg-gradient-to-r from-primary/20 to-transparent -translate-y-1/2"
+                  />
                 )}
                 <div className="text-center">
                   <div className="relative inline-flex mb-6">
@@ -73,12 +172,18 @@ export function StepsSection({ onGetStarted }: StepsSectionProps) {
                     {step.description}
                   </p>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
 
-        <div className="text-center mt-12">
+        <motion.div
+          className="text-center mt-12"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.6 }}
+          variants={ctaVariants}
+        >
           <Button
             size="lg"
             onClick={onGetStarted}
@@ -87,7 +192,7 @@ export function StepsSection({ onGetStarted }: StepsSectionProps) {
             Get Started Now
             <ArrowRight className="ml-2 w-4 h-4" />
           </Button>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

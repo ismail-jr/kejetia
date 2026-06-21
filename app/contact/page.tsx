@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { Button } from "@/components/ui/button";
@@ -13,11 +14,10 @@ import {
   Mail,
   Phone,
   MapPin,
-  MessageSquare,
   Send,
   CheckCircle,
-  Clock,
   ArrowRight,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -68,6 +68,47 @@ const FAQS = [
   },
 ];
 
+// Shared animation variants matching the How It Works page
+const headerContainer = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.25, delayChildren: 0.1 },
+  },
+};
+
+const gridContainer = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.15, delayChildren: 0.1 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, scale: 0.92, y: 18 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.7,
+      ease: [0.16, 1, 0.3, 1] as const,
+    },
+  },
+};
+
+const heroItemVariants = {
+  hidden: { opacity: 0, scale: 0.92, y: 18 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.8,
+      ease: [0.16, 1, 0.3, 1] as const,
+    },
+  },
+};
+
 export default function ContactPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -82,7 +123,6 @@ export default function ContactPage() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Simulate form submission
     setTimeout(() => {
       toast.success("Message sent successfully! We'll get back to you soon.");
       setIsSubmitting(false);
@@ -103,88 +143,119 @@ export default function ContactPage() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="relative py-16 md:py-20 overflow-hidden">
+        <section className="relative py-20 md:py-28 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-primary/5 to-transparent" />
-          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+            initial="hidden"
+            animate="visible"
+            variants={headerContainer}
+          >
             <div className="text-center max-w-3xl mx-auto">
-              <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
-                Contact Us
-              </Badge>
-              <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
+              <motion.div variants={heroItemVariants}>
+                <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
+                  Contact Us
+                </Badge>
+              </motion.div>
+              <motion.h1
+                variants={heroItemVariants}
+                className="text-4xl md:text-5xl font-heading text-foreground mb-4"
+              >
                 Get in Touch
-              </h1>
-              <p className="text-lg text-muted-foreground leading-relaxed">
+              </motion.h1>
+              <motion.p
+                variants={heroItemVariants}
+                className="text-lg text-muted-foreground leading-relaxed"
+              >
                 Have questions or need help? We'd love to hear from you. Reach
                 out and we'll get back to you as soon as possible.
-              </p>
+              </motion.p>
             </div>
-          </div>
+          </motion.div>
         </section>
 
         {/* Contact Form & Info */}
-        <section className="py-12 bg-muted/30">
+        <section className="py-16 bg-muted/30">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid lg:grid-cols-2 gap-8">
               {/* Contact Info Cards */}
-              <div className="space-y-4">
-                <h2 className="text-2xl font-bold text-foreground mb-6">
+              <motion.div
+                className="space-y-4"
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, amount: 0.2 }}
+                variants={gridContainer}
+              >
+                <motion.h2
+                  variants={itemVariants}
+                  className="text-2xl font-heading text-foreground mb-6"
+                >
                   Get in Touch
-                </h2>
+                </motion.h2>
                 {CONTACT_INFO.map((info, index) => {
                   const Icon = info.icon;
                   return (
-                    <Card
-                      key={index}
-                      className="p-5 bg-card border-border hover:shadow-md transition-all"
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <Icon className="w-4 h-4 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-foreground mb-0.5">
-                            {info.title}
-                          </h3>
-                          {info.action ? (
-                            <a
-                              href={info.action}
-                              className="text-primary hover:underline font-medium"
-                            >
-                              {info.value}
-                            </a>
-                          ) : (
-                            <p className="text-foreground font-medium">
-                              {info.value}
+                    <motion.div key={index} variants={itemVariants}>
+                      <Card className="p-5 bg-card border-border hover:shadow-lg transition-all duration-300 group h-full">
+                        <div className="flex items-start gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/20 transition-colors">
+                            <Icon className="w-4 h-4 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-foreground mb-0.5">
+                              {info.title}
+                            </h3>
+                            {info.action ? (
+                              <a
+                                href={info.action}
+                                className="text-primary hover:underline font-medium"
+                              >
+                                {info.value}
+                              </a>
+                            ) : (
+                              <p className="text-foreground font-medium">
+                                {info.value}
+                              </p>
+                            )}
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                              {info.description}
                             </p>
-                          )}
-                          <p className="text-sm text-muted-foreground mt-0.5">
-                            {info.description}
-                          </p>
+                          </div>
                         </div>
-                      </div>
-                    </Card>
+                      </Card>
+                    </motion.div>
                   );
                 })}
-              </div>
+              </motion.div>
 
               {/* Contact Form */}
-              <div>
+              <motion.div
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, amount: 0.2 }}
+                variants={itemVariants}
+              >
                 <Card className="p-6 bg-card border-border">
-                  <h2 className="text-2xl font-bold text-foreground mb-6">
+                  <h2 className="text-2xl font-heading text-foreground mb-6">
                     Send a Message
                   </h2>
                   {isSubmitted ? (
-                    <div className="text-center py-8">
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                      className="text-center py-8"
+                    >
                       <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
                         <CheckCircle className="w-8 h-8 text-green-500" />
                       </div>
                       <h3 className="text-xl font-bold text-foreground mb-2">
-                        Message Sent!
+                        Message Sent! 🎉
                       </h3>
                       <p className="text-muted-foreground">
                         Thank you for reaching out. We'll get back to you soon.
                       </p>
-                    </div>
+                    </motion.div>
                   ) : (
                     <form onSubmit={handleSubmit} className="space-y-4">
                       <div>
@@ -267,7 +338,7 @@ export default function ContactPage() {
                     </form>
                   )}
                 </Card>
-              </div>
+              </motion.div>
             </div>
           </div>
         </section>
@@ -275,52 +346,85 @@ export default function ContactPage() {
         {/* FAQ Section */}
         <section className="py-16">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
-                FAQ
-              </Badge>
-              <h2 className="text-3xl font-bold text-foreground mb-3">
+            <motion.div
+              className="text-center mb-12"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.4 }}
+              variants={headerContainer}
+            >
+              <motion.div variants={itemVariants}>
+                <Badge className="mb-4 bg-primary/10 text-primary border-primary/20">
+                  FAQ
+                </Badge>
+              </motion.div>
+              <motion.h2
+                variants={itemVariants}
+                className="text-3xl font-bold text-foreground mb-3"
+              >
                 Frequently Asked Questions
-              </h2>
-              <p className="text-muted-foreground">
+              </motion.h2>
+              <motion.p
+                variants={itemVariants}
+                className="text-muted-foreground"
+              >
                 Quick answers to common questions
-              </p>
-            </div>
-            <div className="space-y-4">
+              </motion.p>
+            </motion.div>
+            <motion.div
+              className="space-y-4"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.2 }}
+              variants={gridContainer}
+            >
               {FAQS.map((faq, index) => (
-                <Card
-                  key={index}
-                  className="p-6 bg-card border-border hover:shadow-md transition-all"
-                >
-                  <h3 className="font-semibold text-foreground mb-2">
-                    {faq.question}
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {faq.answer}
-                  </p>
-                </Card>
+                <motion.div key={index} variants={itemVariants}>
+                  <Card className="p-6 bg-card border-border hover:shadow-md transition-all">
+                    <h3 className="font-semibold text-foreground mb-2">
+                      {faq.question}
+                    </h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {faq.answer}
+                    </p>
+                  </Card>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           </div>
         </section>
 
         {/* CTA Section */}
-        <section className="py-12 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h2 className="text-2xl font-bold text-foreground mb-3">
-              Still have questions?
-            </h2>
-            <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
+        <section className="py-16 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
+          <motion.div
+            className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center"
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.4 }}
+            variants={headerContainer}
+          >
+            <motion.h2
+              variants={itemVariants}
+              className="text-3xl font-bold text-foreground mb-4"
+            >
+              Still have questions? 🤔
+            </motion.h2>
+            <motion.p
+              variants={itemVariants}
+              className="text-muted-foreground mb-8 max-w-xl mx-auto"
+            >
               Check out our help center or reach out to us directly for
               personalized support.
-            </p>
-            <Button asChild variant="outline" className="rounded-xl gap-2">
-              <Link href="/help">
-                Visit Help Center
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
-          </div>
+            </motion.p>
+            <motion.div variants={itemVariants}>
+              <Button asChild variant="outline" className="rounded-xl gap-2">
+                <Link href="/help">
+                  Visit Help Center
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </Button>
+            </motion.div>
+          </motion.div>
         </section>
       </main>
 

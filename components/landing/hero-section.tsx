@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Shield, CheckCircle, Star, Sparkles } from "lucide-react";
@@ -12,6 +13,31 @@ interface HeroSectionProps {
   onGetStarted: () => void;
 }
 
+// Parent container — staggers each direct motion child in sequence.
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.25,
+      delayChildren: 0.2,
+    },
+  },
+};
+
+// Each piece (badge, heading, paragraph, buttons, trust row) scales + pops in.
+const itemVariants = {
+  hidden: { opacity: 0, scale: 0.92, y: 18 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.9,
+      ease: [0.16, 1, 0.3, 1] as const,
+    },
+  },
+};
+
 export function HeroSection({ onGetStarted }: HeroSectionProps) {
   const [avgRating, setAvgRating] = useState<number | null>(null);
   const [totalReviews, setTotalReviews] = useState(0);
@@ -20,7 +46,6 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
   useEffect(() => {
     const fetchRating = async () => {
       try {
-        // Fetch all reviews to calculate average
         const { data: reviews, error } = await supabase
           .from("reviews")
           .select("rating");
@@ -52,7 +77,6 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
     fetchRating();
   }, []);
 
-  // Format rating display
   const displayRating = loading
     ? "4.8"
     : avgRating !== null
@@ -80,24 +104,43 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
         </div>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-32 w-full">
+      <motion.div
+        className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-32 w-full"
+        initial="hidden"
+        animate="visible"
+        variants={containerVariants}
+      >
         <div className="max-w-2xl">
-          <Badge className="mb-6 px-4 py-1.5 text-sm font-medium bg-primary/10 text-primary border-primary/20 pointer-events-none">
-            <Shield className="font-heading w-3.5 h-3.5 mr-1.5" />
-            Exclusively for UCC Students
-          </Badge>
-          <h1 className="text-5xl lg:text-7xl font-heading mb-6 leading-tight tracking-tight">
+          <motion.div variants={itemVariants}>
+            <Badge className="mb-6 px-4 py-1.5 text-sm font-medium bg-primary/10 text-primary border-primary/20 pointer-events-none">
+              <Shield className="font-heading w-3.5 h-3.5 mr-1.5" />
+              Exclusively for UCC Students
+            </Badge>
+          </motion.div>
+
+          <motion.h1
+            variants={itemVariants}
+            className="text-4xl sm:text-5xl lg:text-7xl font-heading mb-4 sm:mb-6 leading-tight tracking-tight"
+          >
             Skills & Services,
             <span className="block text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary/70">
               Campus to Campus
             </span>
-          </h1>
-          <p className="text-lg text-muted-foreground mb-8 leading-relaxed max-w-lg font-body">
+          </motion.h1>
+
+          <motion.p
+            variants={itemVariants}
+            className="text-base sm:text-lg text-muted-foreground mb-6 sm:mb-8 leading-relaxed max-w-lg font-body"
+          >
             Kejetia is the verified peer-to-peer marketplace where University of
             Cape Coast students offer and discover services from tutoring to
             design, all within your campus community.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4">
+          </motion.p>
+
+          <motion.div
+            variants={itemVariants}
+            className="flex flex-col sm:flex-row gap-4"
+          >
             <Button
               size="lg"
               onClick={onGetStarted}
@@ -117,10 +160,13 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
                 <Sparkles className="ml-2 w-4 h-4" />
               </Link>
             </Button>
-          </div>
+          </motion.div>
 
           {/* Trust badges */}
-          <div className="flex flex-wrap items-center gap-6 mt-10 text-sm text-muted-foreground">
+          <motion.div
+            variants={itemVariants}
+            className="flex flex-wrap items-center gap-4 sm:gap-6 mt-8 sm:mt-10 text-sm text-muted-foreground"
+          >
             <span className="flex items-center gap-1.5">
               <CheckCircle className="w-4 h-4 text-success" /> UCC email
               required
@@ -140,9 +186,9 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
                 <span>Be the first to review</span>
               )}
             </span>
-          </div>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Scroll Indicator */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 animate-bounce hidden sm:block">
