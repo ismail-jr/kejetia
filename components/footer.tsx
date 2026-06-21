@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { GraduationCap, Mail, Phone, MapPin, ChevronRight } from "lucide-react";
+import Image from "next/image";
 
 const TwitterIcon = ({ className }: { className?: string }) => (
   <svg
@@ -94,15 +95,28 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-12">
           {/* Brand Column */}
           <div className="lg:col-span-2">
-            <Link href="/" className="flex items-center gap-2 group mb-4">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-primary to-primary/80 flex items-center justify-center shadow-sm transition-all group-hover:shadow-md">
-                <GraduationCap className="w-4.5 h-4.5 text-primary-foreground" />
+            <Link
+              href="/"
+              className="inline-flex items-center gap-3 mb-4 group"
+            >
+              <div className="relative w-10 h-10 flex-shrink-0">
+                <Image
+                  src="/images/logo.png"
+                  alt="Kejetia Logo"
+                  fill
+                  className="object-contain rounded-xl bg-white p-1.5 group-hover:scale-105 transition-transform"
+                />
               </div>
-              <span className="text-xl font-heading bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                UCC Connect
-              </span>
+              <div>
+                <span className="font-bold text-xl tracking-tight text-foreground block leading-none">
+                  Kejetia
+                </span>
+                <p className=" py-2 text-[10px] text-muted-foreground font-medium tracking-wide uppercase">
+                  Campus Marketplace
+                </p>
+              </div>
             </Link>
-            <p className="font-body text-sm text-muted-foreground mb-4 max-w-md leading-relaxed">
+            <p className="font-body text-sm text-muted-foreground mb-6 max-w-md leading-relaxed">
               The verified peer-to-peer marketplace exclusively for University
               of Cape Coast students. Connect, collaborate, and grow together.
             </p>
@@ -111,7 +125,7 @@ export function Footer() {
                 <Link
                   key={social.name}
                   href={social.href}
-                  className="p-2 rounded-lg bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all duration-200"
+                  className="p-2.5 rounded-lg bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all duration-200"
                   aria-label={social.name}
                 >
                   <social.icon className="h-4 w-4" />
@@ -126,7 +140,7 @@ export function Footer() {
               <h3 className="font-semibold text-foreground mb-4">
                 {section.title}
               </h3>
-              <ul className="space-y-2">
+              <ul className="space-y-2.5">
                 {section.links.map((link) => (
                   <li key={link.name}>
                     <Link
@@ -148,11 +162,11 @@ export function Footer() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <Mail className="h-4 w-4 text-primary" />
-              <span>support@uccconnect.edu</span>
+              <span>support@kejetia.com</span>
             </div>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <Phone className="h-4 w-4 text-primary" />
-              <span>+233 (0) 123 456 789</span>
+              <span>+233 (0) 599 329 539</span>
             </div>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <MapPin className="h-4 w-4 text-primary" />
@@ -172,9 +186,9 @@ export function Footer() {
       <div className="border-t border-border/60 bg-muted/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-            <p>&copy; {currentYear} UCC Connect. All rights reserved.</p>
+            <p>&copy; {currentYear} Kejetia. All rights reserved.</p>
             <p className="flex items-center gap-1">
-              Univerisity of Cape Coast, Ghana
+              University of Cape Coast, Ghana
             </p>
             <div className="flex gap-4">
               <Link
