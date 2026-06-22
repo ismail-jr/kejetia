@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -81,10 +82,12 @@ export function ServiceCard({ service }: ServiceCardProps) {
           href={`/marketplace/${service.id}`}
           className="block relative h-48 w-full overflow-hidden bg-muted"
         >
-          <img
+          <Image
             src={imageUrl}
             alt={service.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="object-cover group-hover:scale-105 transition-transform duration-300"
           />
           <div className="absolute top-3 right-3">
             <Badge

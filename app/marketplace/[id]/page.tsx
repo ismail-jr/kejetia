@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import BookingModal from "@/components/booking/booking-modal";
 import {
   ArrowLeft,
   Star,
@@ -17,11 +19,11 @@ import {
   TrendingUp,
   MapPin,
   Phone,
-  MessageSquare,
-  Share2,
-  CalendarDays,
   Shield,
   Users,
+  CalendarCheck,
+  Pencil,
+  ChevronRight,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -53,9 +55,12 @@ interface Service {
 export default function MarketplaceDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { user, profile, loading: authLoading } = useAuth();
+
   const [service, setService] = useState<Service | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
+  const [bookingModalOpen, setBookingModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchService = async () => {
@@ -185,10 +190,25 @@ export default function MarketplaceDetailPage() {
       .slice(0, 2)
       .toUpperCase() || "U";
 
-  const handleCall = () => {
-    if (service.profiles?.phone) {
-      window.location.href = `tel:${service.profiles.phone}`;
+  // Owner detection — drives whether this viewer sees "Book Now" or
+  // "Edit Listing". Compared against user.id (the auth user's id) rather
+  // than profile.id, since services.provider_id stores auth.users.id —
+  // exposed on the profiles table as `user_id`, a separate column from
+  // `profiles.id` (profiles' own primary key). BookingModal's own
+  // provider lookup confirms this by querying profiles with
+  // .eq("user_id", providerId) using the same provider_id value.
+  const isOwner = !!user && user.id === service.provider_id;
+
+  const handleBookingClick = () => {
+    if (authLoading) return;
+
+    if (!user) {
+      const redirectTarget = `/marketplace/${service.id}`;
+      router.push(`/login?redirect=${encodeURIComponent(redirectTarget)}`);
+      return;
     }
+
+    setBookingModalOpen(true);
   };
 
   return (
@@ -207,13 +227,14 @@ export default function MarketplaceDetailPage() {
           </button>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-            {/* Left Column - Images */}
+            {/* Left Column — Images + service content */}
             <div className="space-y-3">
               <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-muted">
                 <Image
                   src={displayImage}
                   alt={service.title}
                   fill
+                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 500px"
                   className="object-cover"
                   priority
                 />
@@ -237,18 +258,19 @@ export default function MarketplaceDetailPage() {
                         src={url}
                         alt={`Thumbnail ${index + 1}`}
                         fill
+                        sizes="64px"
                         className="object-cover"
                       />
                     </button>
                   ))}
                 </div>
               )}
-            </div>
 
-            {/* Right Column - Details */}
-            <div className="space-y-4">
-              {/* Title & Rating */}
-              <div>
+              {/* Title, rating, description, stats, and tags now live in
+                  the left column alongside the image, since they describe
+                  the service itself — the right column is reserved purely
+                  for the booking action and provider identity. */}
+              <div className="pt-3">
                 <div className="flex items-start justify-between gap-2">
                   <h1 className="text-2xl md:text-3xl font-bold text-foreground leading-tight">
                     {service.title}
@@ -267,7 +289,6 @@ export default function MarketplaceDetailPage() {
                 </p>
               </div>
 
-              {/* Stats Row */}
               <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                 {hasRating && (
                   <span className="flex items-center gap-1">
@@ -285,7 +306,6 @@ export default function MarketplaceDetailPage() {
                 </span>
               </div>
 
-              {/* Tags */}
               {service.tags && service.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {service.tags.map((tag) => (
@@ -299,42 +319,7 @@ export default function MarketplaceDetailPage() {
                 </div>
               )}
 
-              {/* Provider Info */}
-              <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl">
-                <Avatar className="w-10 h-10">
-                  <AvatarImage src={service.profiles?.avatar_url} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-sm">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground text-sm truncate">
-                    {service.profiles?.full_name || "UCC Student"}
-                  </p>
-                  {service.profiles?.location && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <MapPin className="w-3 h-3" />
-                      <span className="truncate">
-                        {service.profiles.location}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                {service.profiles?.phone && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="rounded-xl gap-1.5 flex-shrink-0"
-                    onClick={handleCall}
-                  >
-                    <Phone className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Call</span>
-                  </Button>
-                )}
-              </div>
-
-              {/* Pricing */}
-              <div className="flex items-baseline gap-2 pt-2 border-t border-border/50">
+              <div className="flex items-baseline gap-2 pt-3 border-t border-border/50">
                 <span className="text-2xl font-bold text-primary">
                   {priceDisplay}
                 </span>
@@ -343,38 +328,98 @@ export default function MarketplaceDetailPage() {
                   {pricingInfo.label}
                 </span>
               </div>
+            </div>
 
-              {/* Actions */}
-              <div className="flex gap-2 pt-2">
-                <Button className="rounded-xl flex-1 gap-2">
-                  <MessageSquare className="w-4 h-4" />
-                  Message Provider
+            {/* Right Column — booking action + provider card only */}
+            <div className="space-y-4 md:sticky md:top-24 md:self-start">
+              {/* Primary booking action. Three states:
+                  1. Owner viewing their own listing -> Edit Listing
+                  2. Anyone else, authenticated -> opens BookingModal
+                  3. Unauthenticated -> redirects to /login with a return path */}
+              {isOwner ? (
+                <Button asChild className="w-full rounded-xl gap-2 h-12">
+                  <Link
+                    href={`/provider/dashboard/services/${service.id}/edit`}
+                  >
+                    <Pencil className="w-4 h-4" />
+                    Edit Listing
+                  </Link>
                 </Button>
-                <Button variant="outline" className="rounded-xl px-4 gap-2">
-                  <Share2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Share</span>
+              ) : (
+                <Button
+                  className="w-full rounded-xl gap-2 h-12"
+                  onClick={handleBookingClick}
+                  disabled={authLoading}
+                >
+                  <CalendarCheck className="w-4 h-4" />
+                  Book Now
+                </Button>
+              )}
+
+              {/* Provider card — identity + contact only. "Message Provider"
+                  and inline call/share actions removed per redesign; contact
+                  now happens through the booking flow or the provider's own
+                  profile page. */}
+              <div className="p-4 bg-card border border-border rounded-xl space-y-3">
+                <div className="flex items-center gap-3">
+                  <Avatar className="w-12 h-12">
+                    <AvatarImage src={service.profiles?.avatar_url} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-foreground text-sm truncate">
+                      {service.profiles?.full_name || "UCC Student"}
+                    </p>
+                    {service.profiles?.location && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="w-3 h-3" />
+                        <span className="truncate">
+                          {service.profiles.location}
+                        </span>
+                      </div>
+                    )}
+                    {service.profiles?.phone && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                        <Phone className="w-3 h-3" />
+                        <span className="truncate">
+                          {service.profiles.phone}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Placeholder route — provider preview page doesn't exist
+                    yet, so this will 404 until it's built. Pattern matches
+                    /marketplace/provider/[id] per earlier decision. */}
+                <Button
+                  variant="outline"
+                  asChild
+                  className="w-full rounded-xl gap-1.5 justify-between"
+                >
+                  <Link href={`/marketplace/provider/${service.provider_id}`}>
+                    View Provider Profile
+                    <ChevronRight className="w-4 h-4" />
+                  </Link>
                 </Button>
               </div>
-
-              {/* Provider Phone - Mobile only */}
-              {service.profiles?.phone && (
-                <div className="flex items-center gap-2 p-2 bg-primary/5 rounded-xl border border-primary/10 md:hidden">
-                  <Phone className="w-4 h-4 text-primary" />
-                  <span className="text-sm text-muted-foreground">
-                    Call provider:
-                  </span>
-                  <a
-                    href={`tel:${service.profiles.phone}`}
-                    className="text-sm font-medium text-primary hover:underline"
-                  >
-                    {service.profiles.phone}
-                  </a>
-                </div>
-              )}
             </div>
           </div>
         </div>
       </main>
+
+      {bookingModalOpen && (
+        <BookingModal
+          serviceId={service.id}
+          serviceTitle={service.title}
+          providerId={service.provider_id}
+          servicePrice={parseFloat(service.price)}
+          isOpen={bookingModalOpen}
+          onClose={() => setBookingModalOpen(false)}
+        />
+      )}
 
       <Footer />
     </div>

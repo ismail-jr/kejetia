@@ -4,6 +4,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Search } from "lucide-react";
 import { ServiceCard } from "./service-card";
 
@@ -11,6 +20,11 @@ interface ServicesGridProps {
   services: any[];
   loading: boolean;
   onClearFilters: () => void;
+  page: number;
+  totalPages: number;
+  totalCount: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
 }
 
 const gridContainer = {
@@ -48,15 +62,41 @@ const emptyStateVariants = {
   },
 };
 
+// Builds a compact page-number list with ellipses, e.g.
+// 1 ... 4 5 [6] 7 8 ... 24 — instead of rendering every page as a button,
+// which gets unusable once the catalog grows past a handful of pages.
+function getPageNumbers(
+  current: number,
+  total: number,
+): (number | "ellipsis")[] {
+  const delta = 1;
+  const range: (number | "ellipsis")[] = [];
+  const left = Math.max(2, current - delta);
+  const right = Math.min(total - 1, current + delta);
+
+  range.push(1);
+  if (left > 2) range.push("ellipsis");
+  for (let i = left; i <= right; i++) range.push(i);
+  if (right < total - 1) range.push("ellipsis");
+  if (total > 1) range.push(total);
+
+  return range;
+}
+
 export function ServicesGrid({
   services,
   loading,
   onClearFilters,
+  page,
+  totalPages,
+  totalCount,
+  pageSize,
+  onPageChange,
 }: ServicesGridProps) {
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: pageSize }).map((_, i) => (
           <Card key={i} className="overflow-hidden">
             <Skeleton className="h-48 w-full" />
             <div className="p-4 space-y-3">
@@ -96,29 +136,98 @@ export function ServicesGrid({
     );
   }
 
-  // Keying the whole grid on the visible set of service IDs means that
-  // whenever a filter/search/sort change swaps out *which* services are
-  // shown, AnimatePresence treats it as a fresh mount and the stagger
-  // entrance replays — so every filter interaction feels alive instead of
-  // the grid just silently swapping content in place.
-  const gridKey = services.map((s) => s.id).join("-");
+  const firstItem = (page - 1) * pageSize + 1;
+  const lastItem = Math.min(page * pageSize, totalCount);
+  const pageNumbers = getPageNumbers(page, totalPages);
+
+  // Keying the grid on the page + visible IDs re-triggers the stagger
+  // entrance whenever the page or filtered set changes, so paging feels
+  // responsive rather than just snapping to new content.
+  const gridKey = `page-${page}-${services.map((s) => s.id).join("-")}`;
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={gridKey}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        variants={gridContainer}
-      >
-        {services.map((service) => (
-          <motion.div key={service.id} variants={itemVariants}>
-            <ServiceCard service={service} />
-          </motion.div>
-        ))}
-      </motion.div>
-    </AnimatePresence>
+    <div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={gridKey}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          variants={gridContainer}
+        >
+          {services.map((service) => (
+            <motion.div key={service.id} variants={itemVariants}>
+              <ServiceCard service={service} />
+            </motion.div>
+          ))}
+        </motion.div>
+      </AnimatePresence>
+
+      {totalPages > 1 && (
+        <div className="mt-10 flex flex-col items-center gap-3">
+          {/* Guidance copy — tells the user where they are in the catalog
+              and that more results exist beyond this page, since 9-per-page
+              can otherwise read as "this is everything." */}
+          <p className="text-sm text-muted-foreground">
+            Showing{" "}
+            <span className="font-medium text-foreground">
+              {firstItem}-{lastItem}
+            </span>{" "}
+            of <span className="font-medium text-foreground">{totalCount}</span>{" "}
+            services — browse more pages below
+          </p>
+
+          <Pagination>
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page > 1) onPageChange(page - 1);
+                  }}
+                  className={page === 1 ? "pointer-events-none opacity-40" : ""}
+                />
+              </PaginationItem>
+
+              {pageNumbers.map((p, i) =>
+                p === "ellipsis" ? (
+                  <PaginationItem key={`ellipsis-${i}`}>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                ) : (
+                  <PaginationItem key={p}>
+                    <PaginationLink
+                      href="#"
+                      isActive={p === page}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onPageChange(p);
+                      }}
+                    >
+                      {p}
+                    </PaginationLink>
+                  </PaginationItem>
+                ),
+              )}
+
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (page < totalPages) onPageChange(page + 1);
+                  }}
+                  className={
+                    page === totalPages ? "pointer-events-none opacity-40" : ""
+                  }
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
+    </div>
   );
 }
