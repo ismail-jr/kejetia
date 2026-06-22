@@ -4,6 +4,27 @@ const { getClient } = require("../config/redis");
 const { sendOtpEmail } = require("../services/email-service");
 
 // ─────────────────────────────────────────────
+// Institutional email allowlist
+// ─────────────────────────────────────────────
+//
+// Only @stu.ucc.edu.gh (students) and @ucc.edu.gh (staff/providers) are
+// accepted for real account creation. This is intentionally a simple,
+// visible array rather than an env var or NODE_ENV check — env vars are
+// easy to leave misconfigured across environments, and "allow anything
+// outside production" silently becomes "allow anything" the moment
+// someone forgets to set NODE_ENV correctly on a server. A literal list
+// in the code is the most explicit, least surprising option: to test
+// with a personal email, uncomment a line below; remove/comment it back
+// out when done. Never leave test addresses uncommented in a deployed
+// build.
+const ALLOWED_DOMAINS = ["stu.ucc.edu.gh", "ucc.edu.gh"];
+
+const TEST_EMAIL_ALLOWLIST = [
+  // "jibrielismail2110@gmail.com",
+  // "jibrielismail2110+test@gmail.com",
+];
+
+// ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
 
@@ -19,9 +40,73 @@ const OTP_ATTEMPTS = (email) => `otp_attempts:${email}`;
 const OTP_LOCK = (email) => `otp_lock:${email}`;
 const LOGIN_FAIL = (email) => `login_fail:${email}`;
 
+// True if the email is on the explicit test allowlist above, OR ends in
+// one of the accepted institutional domains. Domain check uses a strict
+// suffix match anchored with "@" so e.g. "notstu.ucc.edu.gh" or
+// "stu.ucc.edu.gh.evil.com" can't slip through a naive .includes() check.
+const isAllowedEmail = (email) => {
+  if (TEST_EMAIL_ALLOWLIST.includes(email)) return true;
+
+  return ALLOWED_DOMAINS.some((domain) => email.endsWith(`@${domain}`));
+};
+
+// Looks up a user by email by walking every page of listUsers() rather
+// than just the first. A single unpaginated call (the original bug) only
+// returns one page (commonly 50 users) and silently misses everyone
+// after that as the user base grows. getUserByEmail would be the
+// simpler fix, but it isn't available on @supabase/supabase-js's admin
+// API at all (confirmed — it's not a real method on this SDK), so this
+// walks pages explicitly instead. perPage is kept fairly high to
+// minimize round trips in the common case.
+const findUserByEmail = async (email) => {
+  const perPage = 1000;
+  let page = 1;
+
+  while (true) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+
+    if (error) throw error;
+
+    const match = data.users.find((u) => u.email?.toLowerCase() === email);
+
+    if (match) return match;
+
+    // Stop once a page comes back with fewer users than requested —
+    // that's the last page. Also stop on an empty page as a safety net.
+    if (data.users.length < perPage) return null;
+
+    page += 1;
+  }
+};
+
+// Constant-time-safe comparison that tolerates length mismatches instead
+// of letting crypto.timingSafeEqual throw a RangeError on malformed or
+// stale cache data. A length mismatch just means "not equal", not a
+// crash — this still resolves to a generic 500 via the outer catch
+// otherwise, which masks the real "Invalid OTP" response the caller
+// should see.
+const safeCompareHex = (a, b) => {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+};
+
 // ─────────────────────────────────────────────
 // Phase 1: Initiate Registration
 // ─────────────────────────────────────────────
+//
+// SECURITY NOTE — password handling:
+// The raw password is NEVER written to Redis. The Supabase Auth user is
+// created immediately, right here, with email_confirm: false. The
+// password is handed directly to Supabase Auth's own secure (hashed)
+// storage and is never touched again by this codebase. Redis only ever
+// stores the OTP hash and a reference to the user id — never the
+// credential itself. Phase 2 just flips email_confirm to true once the
+// OTP is verified; it does not need the password again because the user
+// record already exists.
 
 const initiateRegister = async (req, res) => {
   try {
@@ -31,6 +116,30 @@ const initiateRegister = async (req, res) => {
 
     if (!email || !password || !fullName) {
       return res.status(400).json({ error: "Missing fields" });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        error: "Password must be at least 8 characters",
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        error: "Invalid email address",
+      });
+    }
+
+    // Institutional email enforcement. Previously omitted/commented out
+    // for staging — now active. Rejects anything outside the UCC domains
+    // (or the explicit test allowlist above) before any Supabase Auth
+    // user or OTP gets created for it.
+    if (!isAllowedEmail(email)) {
+      return res.status(400).json({
+        error:
+          "Please use your official UCC email address (e.g. name@stu.ucc.edu.gh)",
+      });
     }
 
     if (!["student", "provider"].includes(role)) {
@@ -49,11 +158,15 @@ const initiateRegister = async (req, res) => {
       return res.status(429).json({ error: "Wait before retry" });
     }
 
-    const { data: users } = await supabaseAdmin.auth.admin.listUsers();
+    const existingUser = await findUserByEmail(email);
 
-    const existingUser = users.find((u) => u.email?.toLowerCase() === email);
+    let userId;
+    let isNewAuthUser = false;
 
     if (existingUser) {
+      // User already exists in auth.users. Check whether they already
+      // hold this role (or are an admin) before allowing a duplicate
+      // registration — same conflict semantics as before.
       const { data: profile } = await supabaseAdmin
         .from("profiles")
         .select("roles")
@@ -65,20 +178,42 @@ const initiateRegister = async (req, res) => {
       if (roles.includes(role) || roles.includes("admin")) {
         return res.status(409).json({ error: "Already registered" });
       }
+
+      // Existing user adding a new role to their account — their auth
+      // user and password already exist, so nothing further to create.
+      userId = existingUser.id;
+    } else {
+      // Brand-new registration. Create the Supabase Auth user right now,
+      // unconfirmed. The password is consumed here and never stored
+      // anywhere else. If the user never completes OTP verification,
+      // this row is simply an unconfirmed user that can't sign in
+      // (Supabase blocks sign-in for unconfirmed accounts by default).
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: false,
+      });
+
+      if (error) throw error;
+
+      userId = data.user.id;
+      isNewAuthUser = true;
     }
 
     const otp = generateOtp();
 
+    // No password in this payload — only what's needed to finish the
+    // profile row and confirm the email once the OTP checks out.
     const payload = {
       otp,
       hash: crypto.createHash("sha256").update(otp).digest("hex"),
       fullName,
       studentId: studentId || null,
       role,
+      userId,
+      isNewAuthUser,
       createdAt: Date.now(),
       expiresAt: Date.now() + 10 * 60 * 1000,
-      attempts: 0,
-      existingUserId: existingUser?.id || null,
     };
 
     await client.set(OTP_KEY(email), JSON.stringify(payload), {
@@ -130,29 +265,31 @@ const verifyRegisterOtp = async (req, res) => {
 
     const incomingHash = crypto.createHash("sha256").update(otp).digest("hex");
 
-    const valid = crypto.timingSafeEqual(
-      Buffer.from(cached.hash),
-      Buffer.from(incomingHash),
-    );
+    // Tolerates malformed/mismatched-length hashes instead of throwing —
+    // a corrupt cache entry now correctly falls through to "Invalid OTP"
+    // rather than bubbling up as an unrelated 500.
+    const valid = safeCompareHex(cached.hash, incomingHash);
 
     if (!valid) {
       return res.status(400).json({
         error: "Invalid OTP",
-        attemptsRemaining: 5 - attempts,
+        attemptsRemaining: Math.max(0, 5 - attempts),
       });
     }
 
-    let userId = cached.existingUserId;
+    const userId = cached.userId;
 
-    if (!userId) {
-      const { data, error } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password: crypto.randomBytes(32).toString("hex"),
-        email_confirm: true,
-      });
+    // The auth user already exists (created in Phase 1, confirmed or
+    // not). For a brand-new registration, flip email_confirm to true now
+    // that the OTP has actually been verified — this is the only auth
+    // mutation Phase 2 needs to make; the password was already set.
+    if (cached.isNewAuthUser) {
+      const { error: confirmError } =
+        await supabaseAdmin.auth.admin.updateUserById(userId, {
+          email_confirm: true,
+        });
 
-      if (error) throw error;
-      userId = data.user.id;
+      if (confirmError) throw confirmError;
     }
 
     const { data: profile } = await supabaseAdmin
@@ -169,16 +306,25 @@ const verifyRegisterOtp = async (req, res) => {
 
     const activeRole = finalRoles.includes("admin") ? "admin" : cached.role;
 
-    await supabaseAdmin.from("profiles").upsert({
-      user_id: userId,
-      email,
-      full_name: cached.fullName,
-      student_id: cached.studentId,
-      roles: finalRoles,
-      active_role: activeRole,
-      is_admin: isAdmin,
-      updated_at: new Date().toISOString(),
-    });
+    const { error: profileError } = await supabaseAdmin.from("profiles").upsert(
+      {
+        user_id: userId,
+        email,
+        full_name: cached.fullName,
+        student_id: cached.studentId,
+        roles: finalRoles,
+        active_role: activeRole,
+        is_admin: isAdmin,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "user_id",
+      },
+    );
+
+    if (profileError) {
+      throw profileError;
+    }
 
     await client.del(OTP_KEY(email));
     await client.del(OTP_ATTEMPTS(email));
@@ -207,6 +353,13 @@ const signIn = async (req, res) => {
 
     const failKey = LOGIN_FAIL(email);
 
+    const locked = await client.get(`login_lock:${email}`);
+    if (locked) {
+      return res.status(429).json({
+        error: "Account temporarily locked. Try again later.",
+      });
+    }
+
     const { data, error } = await supabaseAdmin.auth.signInWithPassword({
       email,
       password,
@@ -229,6 +382,7 @@ const signIn = async (req, res) => {
     }
 
     await client.del(failKey);
+    await client.del(`login_lock:${email}`);
 
     const { data: profile } = await supabaseAdmin
       .from("profiles")
