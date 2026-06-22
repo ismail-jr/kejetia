@@ -129,44 +129,41 @@ export function RegistrationForm() {
   };
 
   return (
-    <div className="w-full max-w-md space-y-6">
-      <div className="w-full max-w-md lg:hidden mb-8 self-start">
+    <div className="w-full max-w-md space-y-4">
+      {/* Mobile Top Navigation Element */}
+      <div className="w-full max-w-md lg:hidden mb-4 self-start">
         <Link href="/" className="inline-flex items-center gap-2.5 group">
-          <div className="relative w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-sm">
+          <div className="relative w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
             <Image
               src="/images/logo.png"
               alt="Kejetia Logo"
               fill
-              sizes="36px"
-              className="object-contain rounded-xl bg-white p-1 group-hover:scale-105 transition-transform"
+              sizes="32px"
+              className="object-contain rounded-lg bg-white p-1 group-hover:scale-105 transition-transform"
             />
           </div>
           <div className="text-left">
-            <span className="font-bold text-base tracking-tight text-foreground block leading-none mb-0.5">
+            <span className="font-bold text-sm tracking-tight text-foreground block leading-none mb-0.5">
               Kejetia
             </span>
-            <p className="text-[10px] text-muted-foreground leading-none">
-              Campus Marketplace
-            </p>
           </div>
         </Link>
       </div>
 
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">
+      <div className="space-y-0.5">
+        <h1 className="text-2xl font-bold tracking-tight">
           {isAddingSecondaryRole ? "Unlock secondary role" : "Create account"}
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground text-xs">
           {isAddingSecondaryRole
             ? "Add a new operating profile layer using your current student identity"
             : "Join the dual-role UCC student marketplace"}
         </p>
       </div>
 
-      {/* Role Selection Blocks */}
       <div className="space-y-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium text-foreground">
+          <span className="text-xs font-semibold text-foreground tracking-wide uppercase">
             Choose your role
           </span>
           <TooltipProvider delayDuration={150}>
@@ -175,43 +172,39 @@ export function RegistrationForm() {
                 <button
                   type="button"
                   aria-label="What's the difference between Student and Provider?"
-                  className="relative flex items-center justify-center w-4 h-4 rounded-full text-muted-foreground hover:text-primary transition-colors"
+                  className="relative flex items-center justify-center w-3.5 h-3.5 rounded-full text-muted-foreground hover:text-primary transition-colors"
                 >
-                  {/* Subtle pulse ring drawing the eye to the help icon */}
                   <span className="absolute inline-flex h-full w-full rounded-full bg-primary/30 animate-ping" />
-                  <HelpCircle className="relative w-4 h-4" />
+                  <HelpCircle className="relative w-3.5 h-3.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom" align="start" className="w-64">
-                <p className="mb-1.5">
+                <p className="mb-1.5 text-xs">
                   <span className="font-semibold">Student</span> — browse and
-                  book services offered by other students.
+                  book services.
                 </p>
-                <p>
+                <p className="text-xs">
                   <span className="font-semibold">Provider</span> — list your
-                  own skills or services for others to book.
-                </p>
-                <p className="mt-1.5 text-muted-foreground">
-                  You can add the other role to your account later.
+                  own skills or services.
                 </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {[
             {
               id: "student",
-              label: "Student (Receiver)",
+              label: "Student",
               icon: BookOpen,
-              description: "Browse & discover services",
+              description: "Browse & hire help",
             },
             {
               id: "provider",
-              label: "Provider (Seller)",
+              label: "Provider",
               icon: Briefcase,
-              description: "Offer your skills",
+              description: "Offer skills & earn",
             },
           ].map(({ id, label, icon: Icon, description }) => (
             <button
@@ -219,59 +212,61 @@ export function RegistrationForm() {
               type="button"
               disabled={isAddingSecondaryRole && role === id}
               onClick={() => selectRole(id as any)}
-              className={`p-4 rounded-xl border-2 transition-all text-left ${
+              className={`p-2.5 rounded-lg border-2 transition-all text-left flex items-center gap-2.5 w-full ${
                 role === id
                   ? "border-primary bg-primary/5 shadow-sm"
-                  : "border-border hover:border-primary/30"
+                  : "border-border hover:border-primary/20"
               } ${isAddingSecondaryRole && role !== id ? "animate-pulse border-dashed border-orange-400" : ""}`}
             >
               <Icon
-                className={`w-5 h-5 mb-2 ${role === id ? "text-primary" : "text-muted-foreground"}`}
+                className={`w-4 h-4 shrink-0 ${role === id ? "text-primary" : "text-muted-foreground"}`}
               />
-              <p className="font-semibold text-sm">{label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {description}
-              </p>
+              <div className="leading-tight">
+                <p className="font-bold text-xs text-foreground">{label}</p>
+                <p className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                  {description}
+                </p>
+              </div>
             </button>
           ))}
         </div>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
         {/* Full Name */}
-        <div className="space-y-2">
-          <Label htmlFor="full_name" className="text-sm font-medium">
+        <div className="space-y-1">
+          <Label htmlFor="full_name" className="text-xs font-heading font-bold">
             Full Name
           </Label>
           <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
               id="full_name"
               disabled={isAddingSecondaryRole}
-              className="pl-10 h-11 rounded-xl disabled:opacity-75 disabled:bg-muted"
+              className="pl-9 h-9 mt-2 text-sm rounded-lg disabled:opacity-75 disabled:bg-muted"
               placeholder="Kwame Nkrumah"
               {...register("full_name")}
             />
           </div>
           {errors.full_name && (
-            <p className="text-xs text-destructive flex items-center gap-1">
-              <span>⚠</span> {errors.full_name.message}
+            <p className="text-[11px] text-destructive mt-0.5">
+              ⚠ {errors.full_name.message}
             </p>
           )}
         </div>
 
         {/* Email Address */}
-        <div className="space-y-2">
-          <Label htmlFor="email" className="text-sm font-medium">
+        <div className="space-y-1">
+          <Label htmlFor="email" className="text-xs font-heading font-bold">
             Email Address
           </Label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
               id="email"
               type="email"
               disabled={isAddingSecondaryRole}
-              className={`pl-10 h-11 rounded-xl disabled:opacity-75 disabled:bg-muted ${
+              className={`pl-9 h-9 mt-2 text-sm rounded-lg disabled:opacity-75 disabled:bg-muted ${
                 errors.email
                   ? "border-destructive focus-visible:ring-destructive"
                   : ""
@@ -281,95 +276,105 @@ export function RegistrationForm() {
             />
           </div>
           {errors.email && (
-            <p className="text-xs text-destructive flex items-center gap-1">
-              <span>⚠</span> {errors.email.message}
+            <p className="text-[11px] text-destructive mt-0.5">
+              ⚠ {errors.email.message}
             </p>
           )}
         </div>
 
         {/* Student ID */}
-        <div className="space-y-2">
-          <Label htmlFor="student_id" className="text-sm font-medium">
+        <div className="space-y-1">
+          <Label
+            htmlFor="student_id"
+            className="text-xs font-heading font-bold"
+          >
             Student ID
           </Label>
           <Input
             id="student_id"
             disabled={isAddingSecondaryRole}
-            className="h-11 rounded-xl disabled:opacity-75 disabled:bg-muted"
+            className="h-9 mt-2 text-sm rounded-lg disabled:opacity-75 disabled:bg-muted"
             placeholder="PS/ITC/22/12345"
             {...register("student_id")}
           />
           {errors.student_id && (
-            <p className="text-xs text-destructive flex items-center gap-1">
-              <span>⚠</span> {errors.student_id.message}
+            <p className="text-[11px] text-destructive mt-0.5">
+              ⚠ {errors.student_id.message}
             </p>
           )}
         </div>
 
         {/* Passwords layout split */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm font-medium">
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="space-y-1">
+            <Label
+              htmlFor="password"
+              className="text-xs font-heading font-bold"
+            >
               {isAddingSecondaryRole ? "Account Password" : "Password"}
             </Label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
-                className="pl-10 pr-10 h-11 rounded-xl"
+                className="pl-9 pr-8 h-9 mt-2 text-sm rounded-lg"
                 placeholder="********"
                 {...register("password")}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
             {errors.password && (
-              <p className="text-xs text-destructive flex items-center gap-1">
-                <span>⚠</span> {errors.password.message}
+              <p className="text-[11px] text-destructive mt-0.5">
+                ⚠ {errors.password.message}
               </p>
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="confirm_password" className="text-sm font-medium">
+          <div className="space-y-1">
+            <Label
+              htmlFor="confirm_password"
+              className="text-xs font-heading font-bold"
+            >
               Confirm Password
             </Label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
               <Input
                 id="confirm_password"
                 type={showConfirmPassword ? "text" : "password"}
-                className="pl-10 pr-10 h-11 rounded-xl"
+                className="pl-9 pr-8 mt-2 h-9 text-sm rounded-lg"
                 placeholder="********"
                 {...register("confirm_password")}
               />
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
             {errors.confirm_password && (
-              <p className="text-xs text-destructive flex items-center gap-1">
-                <span>⚠</span> {errors.confirm_password.message}
+              <p className="text-[11px] text-destructive mt-0.5">
+                ⚠ {errors.confirm_password.message}
               </p>
             )}
           </div>
         </div>
 
+        {/* Action Button */}
         <LoadingButton
           type="submit"
           isLoading={isAuthLoading}
-          loadingText="Processing request..."
-          className="bg-gradient-to-r from-primary to-primary/90 mt-2"
+          loadingText="Processing..."
+          className="bg-gradient-to-r from-primary to-primary/90 mt-1 h-9 rounded-lg text-sm w-full"
           icon={
             isAddingSecondaryRole ? (
               <PlusCircle className="w-4 h-4" />
@@ -384,22 +389,23 @@ export function RegistrationForm() {
         </LoadingButton>
       </form>
 
+      {/* Sign-in Option footer link */}
       {!isAddingSecondaryRole && (
-        <div className="space-y-4">
+        <div className="space-y-2 pt-1">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border/60" />
+              <div className="w-full border-t border-border/50" />
             </div>
-            <div className="relative flex justify-center text-xs">
+            <div className="relative flex justify-center text-[11px]">
               <span className="px-2 bg-background text-muted-foreground">
                 Already have an account?
               </span>
             </div>
           </div>
-          <p className="text-center text-sm">
+          <p className="text-center text-xs">
             <Link
               href="/login"
-              className="text-primary font-medium hover:underline inline-flex items-center gap-1"
+              className="text-primary font-semibold hover:underline inline-flex items-center gap-1"
             >
               Sign in to your account <ArrowRight className="w-3 h-3" />
             </Link>
