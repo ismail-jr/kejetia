@@ -26,6 +26,8 @@ import {
   Briefcase,
   PlusCircle,
   HelpCircle,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
@@ -54,6 +56,41 @@ const schema = z
 
 type FormData = z.infer<typeof schema>;
 
+// ── Password strength helpers ────────────────────────────────────────────────
+function getStrength(password: string): {
+  score: number; // 0–4
+  label: string;
+  color: string; // Tailwind text colour
+  barColor: string; // Tailwind bg colour
+} {
+  if (!password) return { score: 0, label: "", color: "", barColor: "" };
+
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
+  // Cap at 4 levels
+  const capped = Math.min(score, 4);
+
+  const map: Record<
+    number,
+    { label: string; color: string; barColor: string }
+  > = {
+    1: { label: "Weak", color: "text-red-500", barColor: "bg-red-500" },
+    2: { label: "Fair", color: "text-orange-400", barColor: "bg-orange-400" },
+    3: { label: "Good", color: "text-yellow-500", barColor: "bg-yellow-500" },
+    4: { label: "Strong", color: "text-green-500", barColor: "bg-green-500" },
+  };
+
+  return {
+    score: capped,
+    ...(map[capped] ?? { label: "", color: "", barColor: "" }),
+  };
+}
+
 export function RegistrationForm() {
   const { registerUser, isAuthLoading, user } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
@@ -81,10 +118,18 @@ export function RegistrationForm() {
   });
 
   const role = watch("role");
+  const passwordValue = watch("password") ?? "";
+  const confirmValue = watch("confirm_password") ?? "";
 
-  const selectRole = (r: "student" | "provider") => {
-    setValue("role", r);
-  };
+  const strength = getStrength(passwordValue);
+  const passwordsMatch =
+    passwordValue.length > 0 &&
+    confirmValue.length > 0 &&
+    passwordValue === confirmValue;
+  const passwordsMismatch =
+    confirmValue.length > 0 && passwordValue !== confirmValue;
+
+  const selectRole = (r: "student" | "provider") => setValue("role", r);
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -101,6 +146,22 @@ export function RegistrationForm() {
       console.error("Registration processing error caught:", error);
 
       const errorMessage = error.message?.toLowerCase() || "";
+
+      const isRateLimited =
+        error.status === 429 ||
+        error.statusCode === 429 ||
+        errorMessage.includes("wait before retry") ||
+        errorMessage.includes("too many requests");
+
+      if (isRateLimited) {
+        toast.error("Slow down a moment", {
+          description:
+            "You're making requests too quickly. Please wait a minute before trying again.",
+          duration: 5000,
+        });
+        return;
+      }
+
       const isConflict =
         error.status === 409 ||
         error.statusCode === 409 ||
@@ -109,20 +170,18 @@ export function RegistrationForm() {
         errorMessage.includes("already exists");
 
       if (isConflict) {
-        const friendlyMessage = `This email is already registered as a ${data.role}.`;
-
         setError("email", {
           type: "manual",
-          message: friendlyMessage,
+          message: `This email is already registered as a ${data.role}.`,
         });
-
         toast.error("Account Creation Failed", {
           description: `An account with this email already exists under the ${data.role} profile layer. Please sign in instead.`,
           duration: 6000,
         });
       } else {
         toast.error(
-          error.message || "An unexpected error occurred during signup.",
+          error.message ||
+            "An unexpected error occurred during signup. Please try again.",
         );
       }
     }
@@ -130,7 +189,7 @@ export function RegistrationForm() {
 
   return (
     <div className="w-full max-w-md space-y-4">
-      {/* Mobile Top Navigation Element */}
+      {/* Mobile logo */}
       <div className="w-full max-w-md lg:hidden mb-4 self-start">
         <Link href="/" className="inline-flex items-center gap-2.5 group">
           <div className="relative w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
@@ -150,6 +209,7 @@ export function RegistrationForm() {
         </Link>
       </div>
 
+      {/* Heading */}
       <div className="space-y-0.5">
         <h1 className="text-2xl font-bold tracking-tight">
           {isAddingSecondaryRole ? "Unlock secondary role" : "Create account"}
@@ -161,6 +221,7 @@ export function RegistrationForm() {
         </p>
       </div>
 
+      {/* Role selector */}
       <div className="space-y-2">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-semibold text-foreground tracking-wide uppercase">
@@ -216,7 +277,7 @@ export function RegistrationForm() {
                 role === id
                   ? "border-primary bg-primary/5 shadow-sm"
                   : "border-border hover:border-primary/20"
-              } ${isAddingSecondaryRole && role !== id ? "animate-pulse border-dashed border-orange-400" : ""}`}
+              } ${isAddingSecondaryRole && role !== id ? "animate-pulse border-orange-400" : ""}`}
             >
               <Icon
                 className={`w-4 h-4 shrink-0 ${role === id ? "text-primary" : "text-muted-foreground"}`}
@@ -255,7 +316,7 @@ export function RegistrationForm() {
           )}
         </div>
 
-        {/* Email Address */}
+        {/* Email */}
         <div className="space-y-1">
           <Label htmlFor="email" className="text-xs font-heading font-bold">
             Email Address
@@ -304,8 +365,9 @@ export function RegistrationForm() {
           )}
         </div>
 
-        {/* Passwords layout split */}
+        {/* Passwords */}
         <div className="grid grid-cols-2 gap-2.5">
+          {/* Password */}
           <div className="space-y-1">
             <Label
               htmlFor="password"
@@ -319,7 +381,7 @@ export function RegistrationForm() {
                 id="password"
                 type={showPassword ? "text" : "password"}
                 className="pl-9 pr-8 h-9 mt-2 text-sm rounded-lg"
-                placeholder="********"
+                placeholder="••••••••"
                 {...register("password")}
               />
               <button
@@ -330,6 +392,28 @@ export function RegistrationForm() {
                 {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
+
+            {/* Strength meter — only shown when typing */}
+            {passwordValue.length > 0 && (
+              <div className="mt-1.5 space-y-1">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                        i <= strength.score ? strength.barColor : "bg-muted"
+                      }`}
+                    />
+                  ))}
+                </div>
+                {strength.label && (
+                  <p className={`text-[10px] font-medium ${strength.color}`}>
+                    {strength.label} password
+                  </p>
+                )}
+              </div>
+            )}
+
             {errors.password && (
               <p className="text-[11px] text-destructive mt-0.5">
                 ⚠ {errors.password.message}
@@ -337,6 +421,7 @@ export function RegistrationForm() {
             )}
           </div>
 
+          {/* Confirm Password */}
           <div className="space-y-1">
             <Label
               htmlFor="confirm_password"
@@ -349,8 +434,14 @@ export function RegistrationForm() {
               <Input
                 id="confirm_password"
                 type={showConfirmPassword ? "text" : "password"}
-                className="pl-9 pr-8 mt-2 h-9 text-sm rounded-lg"
-                placeholder="********"
+                className={`pl-9 pr-8 mt-2 h-9 text-sm rounded-lg transition-colors ${
+                  passwordsMatch
+                    ? "border-green-500 focus-visible:ring-green-500"
+                    : passwordsMismatch
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : ""
+                }`}
+                placeholder="••••••••"
                 {...register("confirm_password")}
               />
               <button
@@ -361,6 +452,18 @@ export function RegistrationForm() {
                 {showConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
             </div>
+
+            {/* Match / mismatch feedback */}
+            {passwordsMatch && (
+              <p className="text-[10px] text-green-500 flex items-center gap-1 mt-0.5">
+                <CheckCircle2 className="w-3 h-3" /> Passwords match
+              </p>
+            )}
+            {passwordsMismatch && !errors.confirm_password && (
+              <p className="text-[10px] text-destructive flex items-center gap-1 mt-0.5">
+                <XCircle className="w-3 h-3" /> Passwords do not match
+              </p>
+            )}
             {errors.confirm_password && (
               <p className="text-[11px] text-destructive mt-0.5">
                 ⚠ {errors.confirm_password.message}
@@ -369,7 +472,7 @@ export function RegistrationForm() {
           </div>
         </div>
 
-        {/* Action Button */}
+        {/* Submit */}
         <LoadingButton
           type="submit"
           isLoading={isAuthLoading}
@@ -389,7 +492,7 @@ export function RegistrationForm() {
         </LoadingButton>
       </form>
 
-      {/* Sign-in Option footer link */}
+      {/* Sign-in footer */}
       {!isAddingSecondaryRole && (
         <div className="space-y-2 pt-1">
           <div className="relative">

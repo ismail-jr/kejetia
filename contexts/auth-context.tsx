@@ -213,6 +213,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Verification payload missing user details.");
       }
 
+      const rawUser = result.user;
+      const determinedRoles = (rawUser.roles || ["student"]) as UserRole[];
+
+      // Support mapping safely across alternative capitalization strategies from the backend
+      const determinedActive = (rawUser.active_role ||
+        rawUser.activeRole ||
+        determinedRoles[0] ||
+        "student") as UserRole;
+
+      const adminFlag =
+        rawUser.is_admin === true ||
+        rawUser.isAdmin === true ||
+        determinedRoles.includes("admin");
+
+      setRoles(determinedRoles);
+      setActiveRoleState(determinedActive);
+      setIsAdmin(adminFlag);
+
+      // Only fetch the profile if the session details were actually returned and set
       if (result.session?.access_token) {
         const {
           data: { session: newSession },
@@ -224,26 +243,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) throw new Error(error.message);
         setSession(newSession);
         setUser(newSession?.user ?? null);
-      }
 
-      const rawUser = result.user;
-      const determinedRoles = (rawUser.roles || ["student"]) as UserRole[];
-      const determinedActive = (rawUser.active_role ||
-        rawUser.activeRole ||
-        determinedRoles[0] ||
-        "student") as UserRole;
-      const adminFlag =
-        rawUser.is_admin === true ||
-        rawUser.isAdmin === true ||
-        determinedRoles.includes("admin");
-
-      setRoles(determinedRoles);
-      setActiveRoleState(determinedActive);
-      setIsAdmin(adminFlag);
-
-      fetchProfile(rawUser.id).then((p) => {
+        const p = await fetchProfile(rawUser.id);
         if (p) setProfile(p);
-      });
+      } else {
+        // Clean up local auth state since registration requires a clean manual sign-in next
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+      }
 
       return {
         roles: determinedRoles,
