@@ -34,12 +34,17 @@ interface Service {
   };
 }
 
+// Services shown per page. 9 divides cleanly into the existing
+// 1/2/3-column grid (md:grid-cols-2 lg:grid-cols-3) with no leftover
+// partial row at the largest breakpoint.
+const PAGE_SIZE = 9;
+
 export default function MarketplacePage() {
   const { user } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
-  const [filteredServices, setFilteredServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedPricing, setSelectedPricing] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("newest");
@@ -50,9 +55,74 @@ export default function MarketplacePage() {
     max: 1000,
   });
 
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalServicesCount, setTotalServicesCount] = useState(0);
+
+  // Debounce the raw search input so every keystroke doesn't fire a new
+  // Supabase query — only the settled value (searchTerm) drives fetching.
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      setSearchTerm(searchInput);
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  // Reset to page 1 whenever a filter actually changes, so the user isn't
+  // stranded on e.g. page 4 of a now much-smaller filtered result set.
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, selectedCategory, selectedPricing, sortBy, priceRange]);
+
+  // Fetch the full category list once, independent of pagination/filters,
+  // so the category dropdown always reflects everything in the catalog
+  // rather than just whatever is on the current filtered page.
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const { data, error } = await supabase
+        .from("services")
+        .select("category")
+        .eq("status", "approved");
+
+      if (error) {
+        console.error("Error fetching categories:", error);
+        return;
+      }
+
+      const unique = [...new Set((data || []).map((s) => s.category))];
+      setCategories(unique);
+    };
+
+    fetchCategories();
+  }, []);
+
+  // Fetch the unfiltered total once, so "X of Y services" copy and the
+  // "Active" filter badge can compare against the true catalog size.
+  useEffect(() => {
+    const fetchTotalCount = async () => {
+      const { count, error } = await supabase
+        .from("services")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "approved");
+
+      if (error) {
+        console.error("Error fetching total services count:", error);
+        return;
+      }
+
+      setTotalServicesCount(count || 0);
+    };
+
+    fetchTotalCount();
+  }, []);
+
   const fetchServices = useCallback(async () => {
     setLoading(true);
     try {
+      const from = (page - 1) * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
       let query = supabase
         .from("services")
         .select(
@@ -64,8 +134,28 @@ export default function MarketplacePage() {
             location
           )
         `,
+          { count: "exact" },
         )
         .eq("status", "approved");
+
+      // Search — matches title, description, or category server-side.
+      // Tags aren't included here since Postgres array `ilike` needs a
+      // different operator (e.g. array contains); add a `.or()` clause
+      // with `tags.cs.{${term}}` if exact-tag search is needed later.
+      if (searchTerm.trim()) {
+        const term = searchTerm.trim();
+        query = query.or(
+          `title.ilike.%${term}%,description.ilike.%${term}%,category.ilike.%${term}%`,
+        );
+      }
+
+      if (selectedCategory !== "all") {
+        query = query.eq("category", selectedCategory);
+      }
+
+      if (selectedPricing !== "all") {
+        query = query.eq("pricing_type", selectedPricing);
+      }
 
       if (priceRange.min > 0) {
         query = query.gte("price", priceRange.min);
@@ -91,7 +181,9 @@ export default function MarketplacePage() {
           query = query.order("created_at", { ascending: false });
       }
 
-      const { data, error } = await query;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
 
       if (error) {
         console.error("Error fetching services:", error);
@@ -101,58 +193,27 @@ export default function MarketplacePage() {
       }
 
       setServices(data || []);
-      setFilteredServices(data || []);
-      const uniqueCategories = [...new Set(data?.map((s) => s.category) || [])];
-      setCategories(uniqueCategories);
+      setTotalCount(count || 0);
     } catch (error) {
       console.error("Error fetching services:", error);
       toast.error("Failed to load services");
     } finally {
       setLoading(false);
     }
-  }, [sortBy, priceRange]);
+  }, [page, searchTerm, selectedCategory, selectedPricing, sortBy, priceRange]);
 
   useEffect(() => {
     fetchServices();
   }, [fetchServices]);
 
-  useEffect(() => {
-    let filtered = services;
-
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(
-        (service) =>
-          service.title.toLowerCase().includes(term) ||
-          service.description.toLowerCase().includes(term) ||
-          service.tags?.some((tag) => tag.toLowerCase().includes(term)) ||
-          service.category.toLowerCase().includes(term),
-      );
-    }
-
-    if (selectedCategory !== "all") {
-      filtered = filtered.filter(
-        (service) => service.category === selectedCategory,
-      );
-    }
-
-    if (selectedPricing !== "all") {
-      filtered = filtered.filter(
-        (service) => service.pricing_type === selectedPricing,
-      );
-    }
-
-    setFilteredServices(filtered);
-  }, [searchTerm, selectedCategory, selectedPricing, services]);
-
   const clearFilters = () => {
+    setSearchInput("");
     setSearchTerm("");
     setSelectedCategory("all");
     setSelectedPricing("all");
     setPriceRange({ min: 0, max: 1000 });
   };
 
-  // Fix: Convert to boolean properly
   const hasActiveFilters = Boolean(
     searchTerm ||
     selectedCategory !== "all" ||
@@ -161,16 +222,18 @@ export default function MarketplacePage() {
     priceRange.max < 1000,
   );
 
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-      <main className="flex-1 py-16">
+      <main className="flex-1 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <MarketplaceHeader count={filteredServices.length} />
+          <MarketplaceHeader count={totalCount} />
 
           <FilterBar
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
+            searchTerm={searchInput}
+            onSearchChange={setSearchInput}
             showFilters={showFilters}
             onToggleFilters={() => setShowFilters(!showFilters)}
             hasActiveFilters={hasActiveFilters}
@@ -184,14 +247,19 @@ export default function MarketplacePage() {
             onSortChange={setSortBy}
             priceRange={priceRange}
             onPriceRangeChange={setPriceRange}
-            servicesCount={filteredServices.length}
-            totalServices={services.length}
+            servicesCount={totalCount}
+            totalServices={totalServicesCount}
           />
 
           <ServicesGrid
-            services={filteredServices}
+            services={services}
             loading={loading}
             onClearFilters={clearFilters}
+            page={page}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
           />
         </div>
       </main>
