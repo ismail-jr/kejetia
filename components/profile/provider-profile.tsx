@@ -1,5 +1,4 @@
-// B:\Projects\kejetia\components\profile\provider-profile.tsx
-
+// components/profile/provider-profile.tsx
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -74,7 +73,7 @@ interface ProviderProfileProps {
   initialData: any;
   onSave: (data: any) => Promise<void>;
   loading: boolean;
-  userId?: string; // Add userId prop for preview link
+  userId?: string;
 }
 
 export default function ProviderProfile({
@@ -218,6 +217,7 @@ export default function ProviderProfile({
         data: { publicUrl },
       } = supabase.storage.from("avatars").getPublicUrl(filePath);
       const { data: sessionData } = await supabase.auth.getUser();
+
       if (sessionData?.user?.id) {
         const { error: dbError } = await supabase
           .from("profiles")
@@ -249,15 +249,16 @@ export default function ProviderProfile({
       .join("")
       .toUpperCase()
       .slice(0, 2) || "PV";
+
   const isLoading = externalLoading || isSubmitting;
 
-  // Get the user ID for the preview link - use userId prop or try to get from initialData
-  const previewUserId = userId || initialData?.user_id || initialData?.id;
-
+  // ── Resolve the user ID for the preview URL ──────────────────────────────
+  const previewUserId = userId || initialData?.user_id || initialData?.id; // Update this path to match wherever you place the public profile page in your app directory
+  const previewHref = previewUserId ? `/providers/${previewUserId}` : null;
   return (
     <div className="space-y-6">
-      {/* Preview Public Profile Button */}
-      {previewUserId && (
+      {/* ── Preview Public Profile Banner ── */}
+      {previewHref && (
         <div className="bg-gradient-to-r from-primary/5 to-primary/10 rounded-2xl border border-primary/20 p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Eye className="w-5 h-5 text-primary" />
@@ -275,11 +276,8 @@ export default function ProviderProfile({
             className="rounded-xl gap-2 border-primary/30 text-primary hover:bg-primary/10"
             asChild
           >
-            <Link
-              href={`/provider/profile/preview/${previewUserId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
+            {/* target="_blank" opens in a new blank tab */}
+            <Link href={previewHref} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="w-4 h-4" />
               Preview Profile
             </Link>
@@ -288,7 +286,7 @@ export default function ProviderProfile({
       )}
 
       <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-        {/* Provider Business Details */}
+        {/* ── Provider Business Details ── */}
         <div className="bg-card rounded-2xl border border-border/50 p-6 shadow-sm space-y-4">
           <h2 className="font-bold text-foreground font-heading text-lg">
             Provider Business Details
@@ -449,15 +447,13 @@ export default function ProviderProfile({
           </div>
         </div>
 
-        {/* Service Availability Settings */}
+        {/* ── Service Availability ── */}
         <div className="bg-card rounded-2xl border border-border/50 p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="w-5 h-5 text-primary" />
-              <h2 className="font-bold text-foreground font-heading text-lg">
-                Service Availability
-              </h2>
-            </div>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-5 h-5 text-primary" />
+            <h2 className="font-bold text-foreground font-heading text-lg">
+              Service Availability
+            </h2>
           </div>
           <p className="text-xs text-muted-foreground -mt-2">
             Select the active days and standard hours you are open to receive
@@ -518,7 +514,7 @@ export default function ProviderProfile({
             />
             <p className="text-[11px] text-muted-foreground">
               Let clients know your general availability window so they can
-              coordinate specific session times appropriately.
+              coordinate specific session times.
             </p>
             {errors.available_time && (
               <p className="text-destructive text-xs">
@@ -528,12 +524,12 @@ export default function ProviderProfile({
           </div>
         </div>
 
-        {/* Mobile Money Payout Details */}
+        {/* ── Mobile Money Payout ── */}
         <div className="bg-card rounded-2xl border border-amber-500/20 p-6 shadow-sm space-y-4">
           <div className="flex items-center gap-2">
             <CreditCard className="w-5 h-5 text-amber-500" />
             <h2 className="font-bold text-foreground font-heading text-lg">
-              Mobile Money Payout details
+              Mobile Money Payout Details
             </h2>
           </div>
 
@@ -611,7 +607,7 @@ export default function ProviderProfile({
           {isLoading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Committing
-              Business Profiles...
+              Business Profile...
             </>
           ) : (
             "Update Provider Profile"

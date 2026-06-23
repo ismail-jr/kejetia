@@ -7,26 +7,13 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import BookingModal from "@/components/booking/booking-modal";
-import {
-  ArrowLeft,
-  Star,
-  Clock,
-  DollarSign,
-  TrendingUp,
-  MapPin,
-  Phone,
-  Shield,
-  Users,
-  CalendarCheck,
-  Pencil,
-  ChevronRight,
-} from "lucide-react";
-import Image from "next/image";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { ServiceDetails } from "../components/service-details";
+import { ServiceSidebar } from "../components/service-sidebar";
+import { ServiceImages } from "../components/service-images-details";
 
 interface Service {
   id: string;
@@ -55,52 +42,38 @@ interface Service {
 export default function MarketplaceDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const [service, setService] = useState<Service | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeImage, setActiveImage] = useState(0);
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchService = async () => {
       if (!id) return;
-
       try {
         const { data, error } = await supabase
           .from("services")
           .select(
-            `
-            *,
-            profiles:provider_id (
-              full_name,
-              avatar_url,
-              location,
-              phone
-            )
-          `,
+            `*, profiles:provider_id (full_name, avatar_url, location, phone)`,
           )
           .eq("id", id)
           .eq("status", "approved")
           .single();
 
         if (error) {
-          console.error("Error fetching service:", error);
           toast.error("Service not found");
           router.push("/marketplace");
           return;
         }
-
         setService(data);
       } catch (error) {
-        console.error("Error fetching service:", error);
         toast.error("Failed to load service details");
         router.push("/marketplace");
       } finally {
         setLoading(false);
       }
     };
-
     fetchService();
   }, [id, router]);
 
@@ -109,17 +82,13 @@ export default function MarketplaceDetailPage() {
       <div className="min-h-screen flex flex-col bg-background">
         <Navbar />
         <main className="flex-1">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="animate-pulse">
-              <div className="h-6 w-24 bg-muted rounded mb-6" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="aspect-square bg-muted rounded-xl" />
-                <div className="space-y-4">
-                  <div className="h-8 w-3/4 bg-muted rounded" />
-                  <div className="h-4 w-1/2 bg-muted rounded" />
-                  <div className="h-24 bg-muted rounded" />
-                  <div className="h-12 w-1/3 bg-muted rounded" />
-                </div>
+          <div className="max-w-5xl mx-auto px-4 py-8 animate-pulse">
+            <div className="h-6 w-24 bg-muted rounded mb-6" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="aspect-square bg-muted rounded-xl" />
+              <div className="space-y-4">
+                <div className="h-8 w-3/4 bg-muted rounded" />
+                <div className="h-4 w-1/2 bg-muted rounded" />
               </div>
             </div>
           </div>
@@ -138,9 +107,6 @@ export default function MarketplaceDetailPage() {
             <h2 className="text-2xl font-bold text-foreground">
               Service not found
             </h2>
-            <p className="text-muted-foreground mt-2">
-              The service you're looking for doesn't exist.
-            </p>
             <Button asChild className="mt-4 rounded-xl">
               <Link href="/marketplace">Back to Marketplace</Link>
             </Button>
@@ -153,259 +119,79 @@ export default function MarketplaceDetailPage() {
 
   const getPriceDisplay = (price: string, pricingType: string) => {
     const formattedPrice = parseFloat(price).toFixed(2);
-    switch (pricingType) {
-      case "hourly":
-        return `GH₵${formattedPrice}/hr`;
-      case "negotiable":
-        return `From GH₵${formattedPrice}`;
-      default:
-        return `GH₵${formattedPrice}`;
-    }
+    return pricingType === "hourly"
+      ? `GH₵${formattedPrice}/hr`
+      : pricingType === "negotiable"
+        ? `From GH₵${formattedPrice}`
+        : `GH₵${formattedPrice}`;
   };
 
-  const getPricingInfo = (pricingType: string) => {
-    switch (pricingType) {
-      case "hourly":
-        return { label: "Hourly", icon: Clock };
-      case "negotiable":
-        return { label: "Negotiable", icon: TrendingUp };
-      default:
-        return { label: "Fixed", icon: DollarSign };
-    }
+  const getPricingLabel = (pricingType: string) => {
+    return pricingType === "hourly"
+      ? "Hourly"
+      : pricingType === "negotiable"
+        ? "Negotiable"
+        : "Fixed";
   };
 
-  const pricingInfo = getPricingInfo(service.pricing_type);
-  const PriceIcon = pricingInfo.icon;
-  const priceDisplay = getPriceDisplay(service.price, service.pricing_type);
-  const rating = parseFloat(service.avg_rating);
-  const hasRating = rating > 0;
-  const imageUrls = service.images || [];
-  const displayImage =
-    imageUrls[activeImage] || "/images/placeholder-service.jpg";
-  const initials =
-    service.profiles?.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "U";
-
-  // Owner detection — drives whether this viewer sees "Book Now" or
-  // "Edit Listing". Compared against user.id (the auth user's id) rather
-  // than profile.id, since services.provider_id stores auth.users.id —
-  // exposed on the profiles table as `user_id`, a separate column from
-  // `profiles.id` (profiles' own primary key). BookingModal's own
-  // provider lookup confirms this by querying profiles with
-  // .eq("user_id", providerId) using the same provider_id value.
   const isOwner = !!user && user.id === service.provider_id;
 
   const handleBookingClick = () => {
     if (authLoading) return;
-
     if (!user) {
-      const redirectTarget = `/marketplace/${service.id}`;
-      router.push(`/login?redirect=${encodeURIComponent(redirectTarget)}`);
+      router.push(
+        `/login?redirect=${encodeURIComponent(`/marketplace/${service.id}`)}`,
+      );
       return;
     }
-
     setBookingModalOpen(true);
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-
       <main className="flex-1">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
-          {/* Back Button */}
           <button
             onClick={() => router.back()}
-            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
           >
-            <ArrowLeft className="w-4 h-4" />
-            Back
+            <ArrowLeft className="w-4 h-4" /> Back
           </button>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-            {/* Left Column — Images + service content */}
-            <div className="space-y-3">
-              <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-muted">
-                <Image
-                  src={displayImage}
-                  alt={service.title}
-                  fill
-                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 500px"
-                  className="object-cover"
-                  priority
-                />
-                <Badge className="absolute top-3 right-3 bg-black/60 text-white border-0">
-                  {service.category}
-                </Badge>
-              </div>
-              {imageUrls.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {imageUrls.map((url, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setActiveImage(index)}
-                      className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all ${
-                        activeImage === index
-                          ? "border-primary"
-                          : "border-transparent opacity-60 hover:opacity-100"
-                      }`}
-                    >
-                      <Image
-                        src={url}
-                        alt={`Thumbnail ${index + 1}`}
-                        fill
-                        sizes="64px"
-                        className="object-cover"
-                      />
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Title, rating, description, stats, and tags now live in
-                  the left column alongside the image, since they describe
-                  the service itself — the right column is reserved purely
-                  for the booking action and provider identity. */}
-              <div className="pt-3">
-                <div className="flex items-start justify-between gap-2">
-                  <h1 className="text-2xl md:text-3xl font-bold text-foreground leading-tight">
-                    {service.title}
-                  </h1>
-                  {hasRating && (
-                    <div className="flex items-center gap-1 bg-primary/5 px-2.5 py-1 rounded-lg flex-shrink-0">
-                      <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                      <span className="font-semibold text-sm">
-                        {rating.toFixed(1)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
-                  {service.description}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                {hasRating && (
-                  <span className="flex items-center gap-1">
-                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    {rating.toFixed(1)} ({service.total_reviews} reviews)
-                  </span>
-                )}
-                <span className="flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5" />
-                  {service.total_bookings} bookings
-                </span>
-                <span className="flex items-center gap-1">
-                  <Shield className="w-3.5 h-3.5 text-green-500" />
-                  Verified
-                </span>
-              </div>
-
-              {service.tags && service.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {service.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-xs bg-muted px-2.5 py-1 rounded-full text-muted-foreground"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex items-baseline gap-2 pt-3 border-t border-border/50">
-                <span className="text-2xl font-bold text-primary">
-                  {priceDisplay}
-                </span>
-                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <PriceIcon className="w-3 h-3" />
-                  {pricingInfo.label}
-                </span>
-              </div>
+            {/* Left Column - Images and Details */}
+            <div className="space-y-6">
+              <ServiceImages
+                title={service.title}
+                category={service.category}
+                images={service.images}
+              />
+              <ServiceDetails
+                title={service.title}
+                description={service.description}
+                avgRating={service.avg_rating}
+                totalReviews={service.total_reviews}
+                totalBookings={service.total_bookings}
+              />
             </div>
 
-            {/* Right Column — booking action + provider card only */}
-            <div className="space-y-4 md:sticky md:top-24 md:self-start">
-              {/* Primary booking action. Three states:
-                  1. Owner viewing their own listing -> Edit Listing
-                  2. Anyone else, authenticated -> opens BookingModal
-                  3. Unauthenticated -> redirects to /login with a return path */}
-              {isOwner ? (
-                <Button asChild className="w-full rounded-xl gap-2 h-12">
-                  <Link
-                    href={`/provider/dashboard/services/${service.id}/edit`}
-                  >
-                    <Pencil className="w-4 h-4" />
-                    Edit Listing
-                  </Link>
-                </Button>
-              ) : (
-                <Button
-                  className="w-full rounded-xl gap-2 h-12"
-                  onClick={handleBookingClick}
-                  disabled={authLoading}
-                >
-                  <CalendarCheck className="w-4 h-4" />
-                  Book Now
-                </Button>
+            {/* Right Column - Sidebar with Price, Tags, Actions */}
+            <ServiceSidebar
+              serviceId={service.id}
+              providerId={service.provider_id}
+              isOwner={isOwner}
+              authLoading={authLoading}
+              onBookingClick={handleBookingClick}
+              profiles={service.profiles}
+              priceDisplay={getPriceDisplay(
+                service.price,
+                service.pricing_type,
               )}
-
-              {/* Provider card — identity + contact only. "Message Provider"
-                  and inline call/share actions removed per redesign; contact
-                  now happens through the booking flow or the provider's own
-                  profile page. */}
-              <div className="p-4 bg-card border border-border rounded-xl space-y-3">
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-12 h-12">
-                    <AvatarImage src={service.profiles?.avatar_url} />
-                    <AvatarFallback className="bg-primary/10 text-primary font-bold">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground text-sm truncate">
-                      {service.profiles?.full_name || "UCC Student"}
-                    </p>
-                    {service.profiles?.location && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <MapPin className="w-3 h-3" />
-                        <span className="truncate">
-                          {service.profiles.location}
-                        </span>
-                      </div>
-                    )}
-                    {service.profiles?.phone && (
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                        <Phone className="w-3 h-3" />
-                        <span className="truncate">
-                          {service.profiles.phone}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Placeholder route — provider preview page doesn't exist
-                    yet, so this will 404 until it's built. Pattern matches
-                    /marketplace/provider/[id] per earlier decision. */}
-                <Button
-                  variant="outline"
-                  asChild
-                  className="w-full rounded-xl gap-1.5 justify-between"
-                >
-                  <Link href={`/marketplace/provider/${service.provider_id}`}>
-                    View Provider Profile
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
+              priceLabel={getPricingLabel(service.pricing_type)}
+              pricingType={service.pricing_type}
+              tags={service.tags}
+            />
           </div>
         </div>
       </main>
@@ -420,7 +206,6 @@ export default function MarketplaceDetailPage() {
           onClose={() => setBookingModalOpen(false)}
         />
       )}
-
       <Footer />
     </div>
   );
