@@ -12,10 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { BookingWithDetails } from "./booking-card";
+import type { ClientBookingWithDetails } from "@/lib/data/bookings";
 
 interface ReviewModalProps {
-  target: BookingWithDetails | null;
+  target: ClientBookingWithDetails | null;
   onClose: () => void;
   onSubmit: (rating: number, comment: string) => Promise<void>;
   isSubmitting: boolean;

@@ -23,31 +23,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import type { Database } from "@/lib/database.types";
+import type { ProviderBookingOrder } from "@/lib/data/bookings";
 import { DeclineOrderDialog } from "./decline-dialog";
 
-type ServiceRow = Database["public"]["Tables"]["services"]["Row"];
-type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
-
-export interface ProviderOrder {
-  id: string;
-  created_at: string;
-  updated_at?: string;
-  client_id: string;
-  provider_id: string;
-  service_id: string;
-  status: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled";
-  notes: string | null;
-  total_amount?: string | number | null;
-  base_amount?: string | number | null;
-  appointment_date?: string | null;
-  appointment_time?: string | null;
-  payment_status?: string;
-  student?:
-    | (Pick<ProfileRow, "full_name" | "avatar_url"> & { email?: string })
-    | null;
-  services?: Pick<ServiceRow, "title" | "category" | "price" | "images"> | null;
-}
+export type ProviderOrder = ProviderBookingOrder & {
+  /** @deprecated Use `client` from ProviderBookingOrder */
+  student?: ProviderBookingOrder["client"];
+  /** @deprecated Use `service` from ProviderBookingOrder */
+  services?: ProviderBookingOrder["service"];
+};
 
 interface OrderCardProps {
   order: ProviderOrder;
@@ -106,13 +90,16 @@ export function OrderCard({
   const [isUpdating, setIsUpdating] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
 
+  const student = order.client ?? order.student;
+  const service = order.service ?? order.services;
+
   const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
   const StatusIcon = statusConfig.icon;
 
   // Get initials with better fallback
   const getInitials = () => {
-    if (order.student?.full_name) {
-      const names = order.student.full_name.split(" ");
+    if (student?.full_name) {
+      const names = student.full_name.split(" ");
       if (names.length >= 2) {
         return names[0][0] + names[1][0];
       }
@@ -165,10 +152,10 @@ export function OrderCard({
           <div className="flex flex-col lg:flex-row lg:items-start gap-4">
             {/* Thumbnail */}
             <div className="relative w-full lg:w-[180px] h-[140px] lg:h-[160px] bg-muted rounded-xl overflow-hidden flex-shrink-0">
-              {order.services?.images && order.services.images.length > 0 ? (
+              {service?.images && service.images.length > 0 ? (
                 <img
-                  src={order.services.images[0]}
-                  alt={order.services?.title || "Service Thumbnail"}
+                  src={service.images[0]}
+                  alt={service?.title || "Service Thumbnail"}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />
               ) : (
@@ -227,14 +214,14 @@ export function OrderCard({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <h3 className="font-bold text-foreground text-lg leading-tight line-clamp-1">
-                    {order.services?.title || "Requested Service"}
+                    {service?.title || "Requested Service"}
                   </h3>
                   <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1.5">
                     {/* Enhanced Avatar with ring */}
                     <div className="relative">
                       <Avatar className="w-8 h-8 flex-shrink-0 ring-2 ring-primary/20 ring-offset-2 ring-offset-background">
                         <AvatarImage
-                          src={order.student?.avatar_url || undefined}
+                          src={student?.avatar_url || undefined}
                           className="object-cover"
                         />
                         <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/10 text-primary font-bold text-sm">
@@ -245,10 +232,10 @@ export function OrderCard({
                     </div>
                     <div className="flex flex-col">
                       <span className="font-medium text-foreground/90 leading-tight">
-                        {order.student?.full_name || "Unknown Student"}
+                        {student?.full_name || "Unknown Student"}
                       </span>
                       <span className="text-xs text-muted-foreground/70">
-                        {order.student?.email || "No email"}
+                        {student?.email || "No email"}
                       </span>
                     </div>
                   </div>

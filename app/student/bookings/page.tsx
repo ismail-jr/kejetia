@@ -2,14 +2,17 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useAuth } from "@/contexts/auth-context";
-import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  BookingCard,
-  type BookingWithDetails,
-} from "../browse/components/booking/booking-card";
+  listClientBookingsWithDetails,
+  updateBookingStatus,
+  isReviewEligible,
+  type ClientBookingWithDetails,
+} from "@/lib/data/bookings";
+import { createBookingReview } from "@/lib/data/reviews";
+import { BookingCard } from "../browse/components/booking/booking-card";
 import { ReviewModal } from "../browse/components/booking/review-modal";
 
 type TabType = "active" | "completed" | "cancelled";
@@ -17,91 +20,19 @@ type TabType = "active" | "completed" | "cancelled";
 export default function BookingsPage() {
   const { user } = useAuth();
 
-  const [bookings, setBookings] = useState<BookingWithDetails[]>([]);
+  const [bookings, setBookings] = useState<ClientBookingWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("active");
-  const [reviewTarget, setReviewTarget] = useState<BookingWithDetails | null>(
-    null,
-  );
+  const [reviewTarget, setReviewTarget] =
+    useState<ClientBookingWithDetails | null>(null);
   const [submittingReview, setSubmittingReview] = useState(false);
 
   const fetchBookings = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const { data: bookingsData, error: bookingsError } = await supabase
-        .from("bookings")
-        .select("*")
-        .eq("client_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (bookingsError) throw bookingsError;
-      if (!bookingsData || bookingsData.length === 0) {
-        setBookings([]);
-        return;
-      }
-
-      const serviceIds = [...new Set(bookingsData.map((b) => b.service_id))];
-      const providerIds = [...new Set(bookingsData.map((b) => b.provider_id))];
-      const bookingIds = bookingsData.map((b) => b.id);
-
-      // Fetch services
-      const { data: servicesData, error: servicesError } = await supabase
-        .from("services")
-        .select("id, title, category, price, images")
-        .in("id", serviceIds);
-
-      if (servicesError) throw servicesError;
-
-      // Fetch providers
-      const { data: providersData, error: providersError } = await supabase
-        .from("profiles")
-        .select("user_id, full_name, avatar_url, location")
-        .in("user_id", providerIds);
-
-      if (providersError) throw providersError;
-
-      // Fetch reviews for these bookings
-      const { data: reviewsData, error: reviewsError } = await supabase
-        .from("reviews")
-        .select("booking_id, rating")
-        .in("booking_id", bookingIds);
-
-      if (reviewsError) throw reviewsError;
-
-      // Create a map of booking_id -> review data
-      const reviewsMap = new Map();
-      reviewsData?.forEach((review) => {
-        reviewsMap.set(review.booking_id, {
-          rating: review.rating,
-          hasReview: true,
-        });
-      });
-
-      const servicesMap = new Map(servicesData?.map((s) => [s.id, s]));
-      const providersMap = new Map(providersData?.map((p) => [p.user_id, p]));
-
-      const combinedData: BookingWithDetails[] = bookingsData.map((booking) => {
-        const service = servicesMap.get(booking.service_id) || null;
-        const review = reviewsMap.get(booking.id);
-
-        return {
-          ...booking,
-          service: service
-            ? {
-                ...service,
-                // Set avg_rating and total_reviews from the actual review data
-                avg_rating: review?.rating || null,
-                total_reviews: review?.hasReview ? 1 : 0,
-              }
-            : null,
-          provider: providersMap.get(booking.provider_id) || null,
-          // Add review data directly to booking for easy access
-          review: review || null,
-        };
-      });
-
-      setBookings(combinedData);
+      const data = await listClientBookingsWithDetails(user.id);
+      setBookings(data);
     } catch (error) {
       console.error("Error fetching bookings:", error);
       toast.error("Failed to load bookings");
@@ -116,13 +47,7 @@ export default function BookingsPage() {
 
   const handleCancel = async (bookingId: string) => {
     try {
-      const { error } = await supabase
-        .from("bookings")
-        .update({ status: "cancelled" })
-        .eq("id", bookingId);
-
-      if (error) throw error;
-
+      await updateBookingStatus(bookingId, "cancelled");
       setBookings((prev) =>
         prev.map((b) =>
           b.id === bookingId ? { ...b, status: "cancelled" } : b,
@@ -137,27 +62,33 @@ export default function BookingsPage() {
 
   const handleReviewSubmit = async (rating: number, comment: string) => {
     if (!reviewTarget || !user) return;
+
+    if (!isReviewEligible(reviewTarget, reviewTarget.hasReview)) {
+      toast.error(
+        "You can only review bookings that are completed and marked as paid.",
+      );
+      return;
+    }
+
     setSubmittingReview(true);
     try {
-      const { error } = await supabase.from("reviews").insert({
-        booking_id: reviewTarget.id,
-        reviewer_id: user.id,
-        provider_id: reviewTarget.provider_id,
-        service_id: reviewTarget.service_id,
-        rating: rating,
-        comment: comment.trim() || null,
+      await createBookingReview({
+        bookingId: reviewTarget.id,
+        reviewerId: user.id,
+        providerId: reviewTarget.provider_id,
+        serviceId: reviewTarget.service_id,
+        rating,
+        comment,
       });
-
-      if (error) throw error;
 
       toast.success("Review submitted successfully!");
       setReviewTarget(null);
-
-      // Refresh bookings to show the new review
       await fetchBookings();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error submitting review:", error);
-      toast.error("Failed to submit review");
+      const message =
+        error instanceof Error ? error.message : "Failed to submit review";
+      toast.error(message);
     } finally {
       setSubmittingReview(false);
     }
@@ -199,7 +130,6 @@ export default function BookingsPage() {
         </p>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 bg-muted rounded-xl p-1 w-fit">
         {TABS.map(({ key, label, count }) => (
           <button
