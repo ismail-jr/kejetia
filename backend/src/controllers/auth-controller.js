@@ -117,19 +117,57 @@ const hasRole = async (userId, role) => {
   return !!data;
 };
 
+const normalizeRoleState = (profile) => {
+  const roles = safeRoles(profile?.roles);
+  const isAdmin = profile?.is_admin === true || roles.includes("admin");
+  const normalizedRoles =
+    isAdmin && !roles.includes("admin") ? [...roles, "admin"] : roles;
+  const activeRole =
+    profile?.active_role ||
+    (isAdmin ? "admin" : normalizedRoles[0] || "student");
+
+  return { roles: normalizedRoles, activeRole, isAdmin };
+};
+
+// Creates a minimal profiles row for auth.users that were provisioned
+// outside the registration flow (e.g. Supabase Dashboard → Authentication).
+const ensureProfile = async (authUser) => {
+  const { data: existing, error: readError } = await supabaseAdmin
+    .from("profiles")
+    .select("user_id")
+    .eq("user_id", authUser.id)
+    .maybeSingle();
+
+  if (readError) throw readError;
+  if (existing) return;
+
+  const email = normalizeEmail(authUser.email || "");
+  const fullName =
+    authUser.user_metadata?.full_name ||
+    authUser.user_metadata?.fullName ||
+    email.split("@")[0] ||
+    "User";
+
+  const { error: insertError } = await supabaseAdmin.from("profiles").insert({
+    user_id: authUser.id,
+    email,
+    full_name: fullName,
+    active_role: "student",
+    updated_at: new Date().toISOString(),
+  });
+
+  if (insertError) throw insertError;
+};
+
 const loadRoleState = async (userId) => {
-  const { data: profile } = await supabaseAdmin
+  const { data: profile, error } = await supabaseAdmin
     .from("profiles")
     .select("roles, active_role, is_admin")
     .eq("user_id", userId)
     .maybeSingle();
 
-  const roles = safeRoles(profile?.roles);
-  const isAdmin = profile?.is_admin === true || roles.includes("admin");
-  const activeRole =
-    profile?.active_role || (isAdmin ? "admin" : roles[0] || "student");
-
-  return { roles, activeRole, isAdmin };
+  if (error) throw error;
+  return normalizeRoleState(profile);
 };
 
 const provisionRole = async ({ userId, email, fullName, studentId, role }) => {
@@ -476,7 +514,20 @@ const signIn = async (req, res) => {
     await client.del(failKey);
     await client.del(LOGIN_LOCK(email));
 
+    await ensureProfile(data.user);
+
     const { roles, activeRole, isAdmin } = await loadRoleState(data.user.id);
+
+    if (!isAdmin && roles.length === 0) {
+      return res.status(403).json({
+        error: "Account is not set up",
+        code: "PROFILE_INCOMPLETE",
+        details:
+          "Your sign-in succeeded but this account has no profile roles yet. " +
+          "Complete registration as a student or provider, or ask an admin to " +
+          "promote your profile.",
+      });
+    }
 
     return res.status(200).json({
       success: true,

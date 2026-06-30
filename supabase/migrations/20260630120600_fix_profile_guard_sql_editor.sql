@@ -1,9 +1,9 @@
 -- ════════════════════════════════════════════════════════════════════
--- Block self-elevation on profiles
+-- Allow Supabase SQL Editor (postgres) to bootstrap admins
 -- ════════════════════════════════════════════════════════════════════
--- Authenticated users must not be able to set is_admin or rewrite roles[]
--- from the browser client. Only the service_role backend / SQL console may
--- promote admins. roles[] remains trigger-maintained for everyone else.
+-- The original guard only bypassed service_role. Dashboard SQL Editor
+-- runs as postgres, so bootstrap-admin.sql failed with:
+--   Cannot set is_admin without service role
 
 create or replace function public.guard_profile_privileged_columns()
 returns trigger
@@ -41,9 +41,3 @@ begin
   return new;
 end;
 $$;
-
-drop trigger if exists profiles_guard_privileged_columns on public.profiles;
-
-create trigger profiles_guard_privileged_columns
-  before insert or update on public.profiles
-  for each row execute function public.guard_profile_privileged_columns();

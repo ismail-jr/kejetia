@@ -57,7 +57,10 @@ export function LoginForm() {
       const isAdmin =
         result.isAdmin || roles.includes("admin") || activeRole === "admin";
 
-      if (!roles.length) {
+      if (!roles.length && !isAdmin) {
+        toast.error(
+          "Your account is not fully set up. Complete registration or contact support.",
+        );
         await signOut();
         setLoading(false);
         return;
@@ -95,6 +98,7 @@ export function LoginForm() {
       }
 
       router.replace(path);
+      router.refresh();
     } catch (err: any) {
       toast.error(err.message || "Login failed");
     } finally {

@@ -96,15 +96,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ["student", "provider", "admin"].includes(r),
     ) as UserRole[];
 
+    const adminFlag = p.is_admin === true || validRoles.includes("admin");
+
     const determinedRoles =
-      validRoles.length > 0 ? validRoles : ["student" as UserRole];
+      adminFlag && !validRoles.includes("admin")
+        ? ([...validRoles, "admin"] as UserRole[])
+        : validRoles.length > 0
+          ? validRoles
+          : adminFlag
+            ? (["admin"] as UserRole[])
+            : (["student"] as UserRole[]);
 
     const determinedActive =
       p.active_role && ["student", "provider", "admin"].includes(p.active_role)
         ? (p.active_role as UserRole)
-        : (determinedRoles[0] as UserRole);
-
-    const adminFlag = p.is_admin === true || determinedRoles.includes("admin");
+        : adminFlag
+          ? "admin"
+          : (determinedRoles[0] as UserRole);
 
     setProfile(p);
     setRoles(determinedRoles);
@@ -132,7 +140,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const setActiveRole = async (role: UserRole) => {
     if (!user?.id) return;
-    if (!roles.includes(role)) {
+    const mayUseRole = roles.includes(role) || (role === "admin" && isAdmin);
+    if (!mayUseRole) {
       console.warn(`Role switch rejected — user does not have role: ${role}`);
       return;
     }
@@ -148,6 +157,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setActiveRoleState(role);
+  };
+
+  const deriveAuthFromBackendUser = (
+    rawUser: NonNullable<
+      Awaited<ReturnType<typeof authService.signIn>>["user"]
+    >,
+    fallbackActiveRole?: UserRole,
+  ): AuthResponse => {
+    const backendRoles = (rawUser.roles ?? []).filter((r): r is UserRole =>
+      ["student", "provider", "admin"].includes(r),
+    );
+    const adminFlag =
+      rawUser.is_admin === true ||
+      rawUser.isAdmin === true ||
+      backendRoles.includes("admin");
+
+    const determinedRoles =
+      adminFlag && !backendRoles.includes("admin")
+        ? ([...backendRoles, "admin"] as UserRole[])
+        : backendRoles.length > 0
+          ? backendRoles
+          : adminFlag
+            ? (["admin"] as UserRole[])
+            : (["student"] as UserRole[]);
+
+    const determinedActive = (rawUser.active_role ||
+      rawUser.activeRole ||
+      fallbackActiveRole ||
+      (adminFlag ? "admin" : determinedRoles[0]) ||
+      "student") as UserRole;
+
+    setRoles(determinedRoles);
+    setActiveRoleState(determinedActive);
+    setIsAdmin(adminFlag);
+
+    return {
+      roles: determinedRoles,
+      activeRole: determinedActive,
+      isAdmin: adminFlag,
+    };
   };
 
   // Sync role state (+ optional session) from a backend auth response.
@@ -172,30 +221,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(newSession?.user ?? null);
     }
 
-    const rawUser = result.user;
-    const determinedRoles = (rawUser.roles || ["student"]) as UserRole[];
-    const determinedActive = (rawUser.active_role ||
-      rawUser.activeRole ||
-      fallbackActiveRole ||
-      determinedRoles[0] ||
-      "student") as UserRole;
-    const adminFlag =
-      rawUser.is_admin === true ||
-      rawUser.isAdmin === true ||
-      determinedRoles.includes("admin");
+    const p = await fetchProfile(result.user.id);
+    if (p) return applyProfile(p);
 
-    setRoles(determinedRoles);
-    setActiveRoleState(determinedActive);
-    setIsAdmin(adminFlag);
-
-    const p = await fetchProfile(rawUser.id);
-    if (p) setProfile(p);
-
-    return {
-      roles: determinedRoles,
-      activeRole: determinedActive,
-      isAdmin: adminFlag,
-    };
+    return deriveAuthFromBackendUser(result.user, fallbackActiveRole);
   };
 
   const signIn = async (
