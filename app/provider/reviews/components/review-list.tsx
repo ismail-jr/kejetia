@@ -62,8 +62,8 @@ export function ReviewList({ reviews, loading }: ReviewListProps) {
           No Reviews Yet
         </h3>
         <p className="text-muted-foreground max-w-md mx-auto">
-          Reviews from students will appear here once they complete bookings for
-          your services.
+          Reviews appear here after students complete a booking, you mark it as
+          paid, and they leave feedback.
         </p>
         <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <Clock className="w-4 h-4" />
