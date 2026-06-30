@@ -33,6 +33,7 @@ interface AuthContextType {
   registeringEmail: string;
   registerUser: (data: RegisterPayload) => Promise<void>;
   verifyOtp: (email: string, token: string) => Promise<AuthResponse>;
+  resendOtp: (email: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<AuthResponse>;
   addRole: (role: AddableRole) => Promise<AuthResponse>;
 }
@@ -323,6 +324,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Resends the registration OTP via the backend (custom mail flow).
+  const resendOtp = async (email: string) => {
+    const res = await authService.resendRegister(email);
+    toast.success(res.message || "Verification code resent!");
+  };
+
   const registerUser = async (data: RegisterPayload) => {
     setIsAuthLoading(true);
     try {
@@ -458,6 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         registeringEmail,
         registerUser,
         verifyOtp,
+        resendOtp,
         signIn,
         addRole,
       }}

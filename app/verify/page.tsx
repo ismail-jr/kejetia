@@ -14,7 +14,7 @@ import { useAuth } from "@/contexts/auth-context";
 function VerifyPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { verifyOtp } = useAuth();
+  const { verifyOtp, resendOtp } = useAuth();
 
   const email = searchParams.get("email") || "";
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -99,18 +99,19 @@ function VerifyPageContent() {
   };
 
   const handleResend = async () => {
+    if (!email) {
+      toast.error("Missing email address. Please register again.");
+      return;
+    }
     setResending(true);
     try {
-      const { error } = await supabase.auth.resend({ type: "signup", email });
-      if (error) {
-        toast.error(error.message);
-      } else {
-        toast.success("Verification code resent!");
-        setCanResend(false);
-        setCountdown(60);
-        setOtp(["", "", "", "", "", ""]);
-        inputRefs.current[0]?.focus();
-      }
+      await resendOtp(email);
+      setCanResend(false);
+      setCountdown(60);
+      setOtp(["", "", "", "", "", ""]);
+      inputRefs.current[0]?.focus();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to resend code. Please try again.");
     } finally {
       setResending(false);
     }
