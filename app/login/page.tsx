@@ -7,6 +7,7 @@ import {
   MessageSquare,
   CheckCircle,
 } from "lucide-react";
+import { Suspense } from "react";
 import { LoginForm } from "@/components/auth/login-form";
 
 const features = [
@@ -123,7 +124,13 @@ export default function LoginPage() {
 
       {/* RIGHT PANEL (Form Layout Container) */}
       <div className="flex items-center justify-center p-6 lg:p-12 overflow-y-auto h-full">
-        <LoginForm />
+        <Suspense
+          fallback={
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          }
+        >
+          <LoginForm />
+        </Suspense>
       </div>
     </div>
   );

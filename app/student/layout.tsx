@@ -42,7 +42,7 @@ export default function StudentLayout({
       return;
     }
 
-    if (profile?.active_role === "admin" || roles.includes("admin")) {
+    if (profile?.active_role === "admin") {
       router.push("/admin/dashboard");
       return;
     }
