@@ -35,7 +35,8 @@ import { toast } from "sonner";
 
 // When an already signed-in user is unlocking a second role we don't
 // collect a password (the account already exists and is verified), so
-// password validation is skipped in that mode.
+// password validation is skipped in that mode. Field types stay stable
+// (always `string`); only the validation rules differ via superRefine.
 const makeSchema = (requirePassword: boolean) =>
   z
     .object({
@@ -51,14 +52,25 @@ const makeSchema = (requirePassword: boolean) =>
         ),
       student_id: z.string().or(z.string().min(4, "Student ID is required")),
       role: z.enum(["student", "provider"]),
-      password: requirePassword
-        ? z.string().min(8, "Password must be at least 8 characters")
-        : z.string().optional().or(z.literal("")),
-      confirm_password: z.string().optional().or(z.literal("")),
+      password: z.string(),
+      confirm_password: z.string(),
     })
-    .refine((d) => !requirePassword || d.password === d.confirm_password, {
-      message: "Passwords do not match",
-      path: ["confirm_password"],
+    .superRefine((d, ctx) => {
+      if (!requirePassword) return;
+      if (d.password.length < 8) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["password"],
+          message: "Password must be at least 8 characters",
+        });
+      }
+      if (d.password !== d.confirm_password) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["confirm_password"],
+          message: "Passwords do not match",
+        });
+      }
     });
 
 type FormData = z.infer<ReturnType<typeof makeSchema>>;
@@ -152,10 +164,8 @@ export function RegistrationForm() {
       await registerUser({
         email: data.email,
         password: data.password,
-        fullName:
-          data.full_name || (user?.user_metadata?.full_name as string) || "",
-        studentId:
-          data.student_id || (user?.user_metadata?.student_id as string) || "",
+        fullName: data.full_name || "",
+        studentId: data.student_id || "",
         role: data.role,
       });
     } catch (error: any) {
