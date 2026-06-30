@@ -35,16 +35,37 @@ export default function ProviderLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, roles, setActiveRole } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading) {
-      if (!user) router.push("/login");
-      else if (profile && profile.active_role === "admin")
-        router.push("/admin/dashboard");
+    if (loading) return;
+
+    if (!user) {
+      router.push("/login");
+      return;
     }
-  }, [user, profile, loading, router]);
+
+    if (profile?.active_role === "admin" || roles.includes("admin")) {
+      router.push("/admin/dashboard");
+      return;
+    }
+
+    // Must hold the provider role (row in provider_profiles), not just be
+    // browsing with active_role still set to student from a prior session.
+    if (!roles.includes("provider")) {
+      router.replace(
+        roles.includes("student") ? "/register?role=provider" : "/role-selection",
+      );
+      return;
+    }
+
+    // Entering any /provider/* route implies the provider workspace — keep
+    // active_role in sync so create-service and other checks pass.
+    if (profile?.active_role !== "provider") {
+      void setActiveRole("provider");
+    }
+  }, [user, profile, loading, roles, router, setActiveRole]);
 
   if (loading) {
     return (

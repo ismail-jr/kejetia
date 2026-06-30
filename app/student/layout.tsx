@@ -31,20 +31,33 @@ export default function StudentLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, roles, setActiveRole } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (
-      !loading &&
-      (!user ||
-        (profile &&
-          profile.active_role !== "student" &&
-          profile.active_role !== "provider"))
-    ) {
-      if (!user) router.push("/login");
+    if (loading) return;
+
+    if (!user) {
+      router.push("/login");
+      return;
     }
-  }, [user, profile, loading, router]);
+
+    if (profile?.active_role === "admin" || roles.includes("admin")) {
+      router.push("/admin/dashboard");
+      return;
+    }
+
+    if (!roles.includes("student")) {
+      router.replace(
+        roles.includes("provider") ? "/register?role=student" : "/role-selection",
+      );
+      return;
+    }
+
+    if (profile?.active_role !== "student") {
+      void setActiveRole("student");
+    }
+  }, [user, profile, loading, roles, router, setActiveRole]);
 
   if (loading) {
     return (
