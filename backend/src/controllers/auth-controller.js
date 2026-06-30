@@ -52,6 +52,17 @@ const LOGIN_LOCK = (email) => `login_lock:${email}`;
 // ─────────────────────────────────────────────
 const normalizeEmail = (email = "") => email.toLowerCase().trim();
 
+// Extracts a concise, useful description from an error (Supabase/Postgres
+// errors carry message/code/details/hint). Surfaced in 500 responses so
+// failures like "relation public.student_profiles does not exist" (schema
+// not migrated) are visible to the client instead of a generic message.
+const errorDetails = (err) => {
+  if (!err) return undefined;
+  const parts = [err.message, err.details, err.hint].filter(Boolean);
+  const text = parts.join(" — ");
+  return err.code ? `[${err.code}] ${text}` : text || String(err);
+};
+
 const safeRoles = (roles) =>
   Array.isArray(roles) ? roles.filter(Boolean) : [];
 
@@ -262,7 +273,10 @@ const initiateRegister = async (req, res) => {
     return res.json({ message: "Verification code sent" });
   } catch (err) {
     console.error("initiateRegister error:", err);
-    return res.status(500).json({ error: "Registration failed to start" });
+    return res.status(500).json({
+      error: "Registration failed to start",
+      details: errorDetails(err),
+    });
   }
 };
 
@@ -317,7 +331,9 @@ const resendOtp = async (req, res) => {
     return res.json({ message: "Verification code resent" });
   } catch (err) {
     console.error("resendOtp error:", err);
-    return res.status(500).json({ error: "Failed to resend code" });
+    return res
+      .status(500)
+      .json({ error: "Failed to resend code", details: errorDetails(err) });
   }
 };
 
@@ -399,7 +415,9 @@ const verifyRegisterOtp = async (req, res) => {
     });
   } catch (err) {
     console.error("verifyRegisterOtp error:", err);
-    return res.status(500).json({ error: "Verification failed" });
+    return res
+      .status(500)
+      .json({ error: "Verification failed", details: errorDetails(err) });
   }
 };
 
@@ -455,7 +473,9 @@ const signIn = async (req, res) => {
     });
   } catch (err) {
     console.error("signIn error:", err);
-    return res.status(500).json({ error: "Sign in failed" });
+    return res
+      .status(500)
+      .json({ error: "Sign in failed", details: errorDetails(err) });
   }
 };
 
@@ -505,7 +525,9 @@ const addRole = async (req, res) => {
     });
   } catch (err) {
     console.error("addRole error:", err);
-    return res.status(500).json({ error: "Failed to add role" });
+    return res
+      .status(500)
+      .json({ error: "Failed to add role", details: errorDetails(err) });
   }
 };
 

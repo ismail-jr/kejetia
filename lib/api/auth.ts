@@ -1,6 +1,14 @@
 // lib/api/auth.ts
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
+// Builds an Error from a failed response body, appending the backend's
+// `details` (e.g. the underlying Postgres error) when present so problems
+// like an unmigrated schema are visible instead of a generic message.
+function apiError(data: any, fallback: string): Error {
+  const base = data?.error || fallback;
+  return new Error(data?.details ? `${base}: ${data.details}` : base);
+}
+
 export interface RegisterPayload {
   email: string;
   fullName: string;
@@ -44,8 +52,7 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok)
-      throw new Error(data.error || "Failed to initiate registration");
+    if (!response.ok) throw apiError(data, "Failed to initiate registration");
     return data;
   },
 
@@ -60,8 +67,7 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok)
-      throw new Error(data.error || "Failed to resend verification code");
+    if (!response.ok) throw apiError(data, "Failed to resend verification code");
     return data;
   },
 
@@ -77,7 +83,7 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Invalid or expired code");
+    if (!response.ok) throw apiError(data, "Invalid or expired code");
     return data;
   },
 
@@ -90,7 +96,7 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Sign in failed");
+    if (!response.ok) throw apiError(data, "Sign in failed");
     return data;
   },
 
@@ -111,7 +117,7 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed to add role");
+    if (!response.ok) throw apiError(data, "Failed to add role");
     return data;
   },
 };
