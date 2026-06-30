@@ -11,8 +11,6 @@ import {
   CheckSquare,
   AlertTriangle,
   BarChart2,
-  Shield,
-  Settings,
   Bell,
 } from "lucide-react";
 
@@ -24,7 +22,6 @@ const NAV_ITEMS = [
   { label: "Reports", href: "/admin/reports", icon: AlertTriangle },
   { label: "Analytics", href: "/admin/analytics", icon: BarChart2 },
   { label: "Notifications", href: "/admin/notifications", icon: Bell },
-  // { label: "Settings", href: "/admin/settings", icon: Settings },
 ];
 
 export default function AdminLayout({
@@ -32,7 +29,7 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, activeRole, loading } = useAuth();
+  const { user, activeRole, isAdmin, loading, setActiveRole } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -43,14 +40,23 @@ export default function AdminLayout({
       return;
     }
 
-    if (!activeRole) return;
+    if (!isAdmin) {
+      router.replace(
+        activeRole === "provider"
+          ? "/provider/dashboard"
+          : activeRole === "student"
+            ? "/student/dashboard"
+            : "/login",
+      );
+      return;
+    }
 
-    if (activeRole === "admin") return;
+    if (activeRole !== "admin") {
+      void setActiveRole("admin");
+    }
+  }, [user, isAdmin, activeRole, loading, router, setActiveRole]);
 
-    router.push(`/${activeRole}/dashboard`);
-  }, [user, activeRole, loading, router]);
-
-  if (loading) {
+  if (loading || !user || !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -58,7 +64,6 @@ export default function AdminLayout({
     );
   }
 
-  // If the user isn't an admin, show the loading spinner while the useEffect redirects them.
   if (activeRole !== "admin") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">

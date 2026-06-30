@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,7 +23,8 @@ type FormData = z.infer<typeof schema>;
 
 export function LoginForm() {
   const router = useRouter();
-  const { signIn, signOut } = useAuth();
+  const searchParams = useSearchParams();
+  const { signIn, signOut, setActiveRole } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -75,9 +76,16 @@ export function LoginForm() {
 
       toast.success("Login successful");
 
+      const nextPath = searchParams.get("next");
       let path = "/login";
+
       if (isAdmin) {
+        if (activeRole !== "admin") {
+          await setActiveRole("admin");
+        }
         path = "/admin/dashboard";
+      } else if (nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")) {
+        path = nextPath;
       } else if (multipleRoles) {
         path = "/role-selection";
       } else if (activeRole) {
