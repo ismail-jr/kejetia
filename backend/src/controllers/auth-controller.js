@@ -8,10 +8,8 @@ const { sendOtpEmail } = require("../services/email-service");
 // ─────────────────────────────────────────────
 //
 // Only @stu.ucc.edu.gh (students) and @ucc.edu.gh (staff/providers) are
-// accepted for real account creation. This is intentionally a simple,
-// visible array rather than an env var or NODE_ENV check. To test with a
-// personal email, uncomment a line in TEST_EMAIL_ALLOWLIST; remove it
-// before deploying.
+// accepted for real account creation. To test with a personal email,
+// uncomment a line in TEST_EMAIL_ALLOWLIST; remove it before deploying.
 const ALLOWED_DOMAINS = ["stu.ucc.edu.gh", "ucc.edu.gh"];
 
 const TEST_EMAIL_ALLOWLIST = [
@@ -21,10 +19,9 @@ const TEST_EMAIL_ALLOWLIST = [
 // Role model
 // ----------
 // A UCC account (one email) can hold the "student" and/or "provider"
-// role. Role membership is stored in Postgres as the existence of a row
-// in student_profiles / provider_profiles (1:1 extensions of profiles).
-// profiles.roles[] is a trigger-maintained projection of those tables
-// and is what we read back to tell the client which roles a user has.
+// role. Role membership is stored as the existence of a row in
+// student_profiles / provider_profiles. profiles.roles[] is a
+// trigger-maintained projection of those tables.
 const VALID_ROLES = ["student", "provider"];
 const ROLE_TABLE = {
   student: "student_profiles",
@@ -32,9 +29,27 @@ const ROLE_TABLE = {
 };
 
 // ─────────────────────────────────────────────
+// Recommended security parameters
+// ─────────────────────────────────────────────
+const OTP_TTL_SECONDS = 10 * 60; // code lifetime: 10 minutes
+const OTP_EXPIRY_MINUTES = 10; // human-readable, used in the email
+const OTP_MAX_VERIFY_ATTEMPTS = 5; // wrong tries before a code is burned
+const RESEND_COOLDOWN_SECONDS = 60; // min gap between code sends per email
+const LOGIN_MAX_ATTEMPTS = 5; // failed sign-ins before lockout
+const LOGIN_LOCK_SECONDS = 15 * 60; // lockout duration
+
+// ─────────────────────────────────────────────
+// Redis key helpers
+// ─────────────────────────────────────────────
+const OTP_KEY = (email) => `otp:${email}`;
+const OTP_ATTEMPTS = (email) => `otp_attempts:${email}`;
+const RESEND_CD = (email) => `otp_resend_cd:${email}`;
+const LOGIN_FAIL = (email) => `login_fail:${email}`;
+const LOGIN_LOCK = (email) => `login_lock:${email}`;
+
+// ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
-
 const normalizeEmail = (email = "") => email.toLowerCase().trim();
 
 const safeRoles = (roles) =>
@@ -42,18 +57,16 @@ const safeRoles = (roles) =>
 
 const generateOtp = () => crypto.randomInt(100000, 999999).toString();
 
-const OTP_KEY = (email) => `otp:${email}`;
-const OTP_ATTEMPTS = (email) => `otp_attempts:${email}`;
-const OTP_LOCK = (email) => `otp_lock:${email}`;
-const LOGIN_FAIL = (email) => `login_fail:${email}`;
+const hashOtp = (otp) =>
+  crypto.createHash("sha256").update(String(otp)).digest("hex");
 
 const isAllowedEmail = (email) => {
   if (TEST_EMAIL_ALLOWLIST.includes(email)) return true;
   return ALLOWED_DOMAINS.some((domain) => email.endsWith(`@${domain}`));
 };
 
-// Walks every page of listUsers() to find a user by email. getUserByEmail
-// is not available on the supabase-js admin API, so we page explicitly.
+// Walks every page of listUsers() to find a user by email (getUserByEmail
+// is not available on the supabase-js admin API).
 const findUserByEmail = async (email) => {
   const perPage = 1000;
   let page = 1;
@@ -63,7 +76,6 @@ const findUserByEmail = async (email) => {
       page,
       perPage,
     });
-
     if (error) throw error;
 
     const match = data.users.find((u) => u.email?.toLowerCase() === email);
@@ -80,8 +92,6 @@ const safeCompareHex = (a, b) => {
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 };
 
-// Returns true if the user already holds the given role (the role's
-// extension row exists). Used to reject duplicate role provisioning.
 const hasRole = async (userId, role) => {
   const table = ROLE_TABLE[role];
   if (!table) return false;
@@ -96,8 +106,6 @@ const hasRole = async (userId, role) => {
   return !!data;
 };
 
-// Reads the trigger-maintained roles[] projection + active_role + admin
-// flag for a user, with sensible fallbacks.
 const loadRoleState = async (userId) => {
   const { data: profile } = await supabaseAdmin
     .from("profiles")
@@ -108,15 +116,11 @@ const loadRoleState = async (userId) => {
   const roles = safeRoles(profile?.roles);
   const isAdmin = profile?.is_admin === true || roles.includes("admin");
   const activeRole =
-    profile?.active_role ||
-    (isAdmin ? "admin" : roles[0] || "student");
+    profile?.active_role || (isAdmin ? "admin" : roles[0] || "student");
 
   return { roles, activeRole, isAdmin };
 };
 
-// Provisions identity + a single role for a freshly verified account.
-// Creates the profiles row (idempotent upsert) then the role-extension
-// row, whose insert fires the trigger that populates profiles.roles[].
 const provisionRole = async ({ userId, email, fullName, studentId, role }) => {
   const { error: profileError } = await supabaseAdmin.from("profiles").upsert(
     {
@@ -129,26 +133,47 @@ const provisionRole = async ({ userId, email, fullName, studentId, role }) => {
     },
     { onConflict: "user_id" },
   );
-
   if (profileError) throw profileError;
 
   const table = ROLE_TABLE[role];
   const { error: roleError } = await supabaseAdmin
     .from(table)
     .upsert({ user_id: userId }, { onConflict: "user_id" });
-
   if (roleError) throw roleError;
 };
 
+// Generates a fresh OTP, persists its hash + the pending-registration
+// metadata in Redis, sends the email, and arms the resend cooldown.
+// Throws if the email fails to send (so callers can roll back). Never
+// stores the raw password — that already lives in Supabase Auth.
+const issueOtp = async (client, email, meta) => {
+  const otp = generateOtp();
+
+  const payload = {
+    hash: hashOtp(otp),
+    fullName: meta.fullName,
+    studentId: meta.studentId || null,
+    role: meta.role,
+    userId: meta.userId,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + OTP_TTL_SECONDS * 1000,
+  };
+
+  await client.set(OTP_KEY(email), JSON.stringify(payload), {
+    EX: OTP_TTL_SECONDS,
+  });
+  await client.set(OTP_ATTEMPTS(email), "0", { EX: OTP_TTL_SECONDS });
+
+  // Send first; only arm the cooldown after a successful send so a failed
+  // delivery doesn't block an immediate retry.
+  await sendOtpEmail(email, otp, OTP_EXPIRY_MINUTES);
+
+  await client.set(RESEND_CD(email), "1", { EX: RESEND_COOLDOWN_SECONDS });
+};
+
 // ─────────────────────────────────────────────
-// Phase 1: Initiate Registration (brand-new accounts only)
+// Phase 1: Initiate Registration (brand-new accounts)
 // ─────────────────────────────────────────────
-//
-// This endpoint is for first-time sign-up. Adding a SECOND role to an
-// existing account no longer happens here — that requires being signed
-// in and goes through POST /api/auth/role/add (no OTP, since the email
-// is already verified). If the email already has an auth user, we tell
-// the caller to sign in instead.
 const initiateRegister = async (req, res) => {
   try {
     let { email, password, fullName, studentId, role = "student" } = req.body;
@@ -156,141 +181,204 @@ const initiateRegister = async (req, res) => {
     email = normalizeEmail(email);
 
     if (!email || !password || !fullName) {
-      return res.status(400).json({ error: "Missing fields" });
+      return res.status(400).json({ error: "Missing required fields" });
     }
-
     if (password.length < 8) {
-      return res.status(400).json({
-        error: "Password must be at least 8 characters",
-      });
+      return res
+        .status(400)
+        .json({ error: "Password must be at least 8 characters" });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ error: "Invalid email address" });
     }
-
     if (!isAllowedEmail(email)) {
       return res.status(400).json({
         error:
           "Please use your official UCC email address (e.g. name@stu.ucc.edu.gh)",
       });
     }
-
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({ error: "Invalid role" });
     }
 
     const client = getClient();
 
-    if (await client.get(OTP_LOCK(email))) {
-      return res.status(429).json({ error: "Too many requests" });
-    }
-
-    if (await client.get(OTP_KEY(email))) {
-      return res.status(429).json({ error: "Wait before retry" });
+    // Respect the resend cooldown so rapid double-submits don't spam mail.
+    if (await client.get(RESEND_CD(email))) {
+      return res.status(429).json({
+        error: "A code was just sent. Please wait a moment before retrying.",
+      });
     }
 
     const existingUser = await findUserByEmail(email);
 
+    let userId;
+    let isNewAuthUser = false;
+
     if (existingUser) {
-      // Account already exists. Adding another role is a signed-in
-      // action now, so direct the caller to sign in.
-      return res.status(409).json({
-        error: "Already registered. Please sign in to add another role.",
+      // If they already completed registration (hold any role / admin),
+      // adding another role is a signed-in action — send them to login.
+      const { roles, isAdmin } = await loadRoleState(existingUser.id);
+      if (roles.length > 0 || isAdmin) {
+        return res.status(409).json({
+          error: "Already registered. Please sign in to add another role.",
+        });
+      }
+      // Otherwise this is an abandoned registration (auth user exists but
+      // was never confirmed/provisioned) — reuse it and re-issue a code.
+      userId = existingUser.id;
+    } else {
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: false,
+      });
+      if (error) throw error;
+      userId = data.user.id;
+      isNewAuthUser = true;
+    }
+
+    try {
+      await issueOtp(client, email, { fullName, studentId, role, userId });
+    } catch (mailErr) {
+      // Roll back a just-created auth user so the email isn't permanently
+      // stuck in a half-registered, can't-resend state.
+      if (isNewAuthUser) {
+        await supabaseAdmin.auth.admin
+          .deleteUser(userId)
+          .catch((e) => console.error("rollback deleteUser failed:", e.message));
+      }
+      await client.del(OTP_KEY(email));
+      await client.del(OTP_ATTEMPTS(email));
+      console.error("initiate email send failed:", mailErr.message);
+      return res.status(502).json({
+        error:
+          "We couldn't send the verification email. Please check the address and try again.",
       });
     }
 
-    // Brand-new registration. Create the Supabase Auth user now,
-    // unconfirmed. The password is consumed here and never stored in
-    // Redis. Phase 2 flips email_confirm to true once the OTP checks out.
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: false,
-    });
-
-    if (error) throw error;
-
-    const userId = data.user.id;
-    const otp = generateOtp();
-
-    const payload = {
-      otp,
-      hash: crypto.createHash("sha256").update(otp).digest("hex"),
-      fullName,
-      studentId: studentId || null,
-      role,
-      userId,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + 10 * 60 * 1000,
-    };
-
-    await client.set(OTP_KEY(email), JSON.stringify(payload), { EX: 600 });
-    await client.set(OTP_ATTEMPTS(email), "0", { EX: 600 });
-
-    await sendOtpEmail(email, otp);
-
-    return res.json({ message: "OTP sent" });
+    return res.json({ message: "Verification code sent" });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "init failed" });
+    console.error("initiateRegister error:", err);
+    return res.status(500).json({ error: "Registration failed to start" });
+  }
+};
+
+// ─────────────────────────────────────────────
+// Resend OTP (mid-registration)
+// ─────────────────────────────────────────────
+//
+// Reuses the pending-registration metadata still cached in Redis and
+// sends a brand-new code, resetting the wrong-attempt counter. Works only
+// while the original verification session is still alive (within the OTP
+// TTL); after that the user must restart registration.
+const resendOtp = async (req, res) => {
+  try {
+    let { email } = req.body;
+    email = normalizeEmail(email);
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const client = getClient();
+
+    if (await client.get(RESEND_CD(email))) {
+      return res.status(429).json({
+        error: "Please wait a moment before requesting another code.",
+      });
+    }
+
+    const raw = await client.get(OTP_KEY(email));
+    if (!raw) {
+      return res.status(400).json({
+        error: "Your verification session has expired. Please register again.",
+      });
+    }
+
+    const cached = JSON.parse(raw);
+
+    try {
+      await issueOtp(client, email, {
+        fullName: cached.fullName,
+        studentId: cached.studentId,
+        role: cached.role,
+        userId: cached.userId,
+      });
+    } catch (mailErr) {
+      console.error("resend email send failed:", mailErr.message);
+      return res.status(502).json({
+        error: "We couldn't resend the verification email. Please try again.",
+      });
+    }
+
+    return res.json({ message: "Verification code resent" });
+  } catch (err) {
+    console.error("resendOtp error:", err);
+    return res.status(500).json({ error: "Failed to resend code" });
   }
 };
 
 // ─────────────────────────────────────────────
 // Phase 2: Verify OTP
 // ─────────────────────────────────────────────
-
 const verifyRegisterOtp = async (req, res) => {
   try {
     let { email, otp } = req.body;
-
     email = normalizeEmail(email);
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: "Email and code are required" });
+    }
 
     const client = getClient();
     const raw = await client.get(OTP_KEY(email));
 
     if (!raw) {
-      return res.status(400).json({ error: "Invalid OTP" });
+      return res
+        .status(400)
+        .json({ error: "This code has expired. Please request a new one." });
     }
 
     const cached = JSON.parse(raw);
 
     if (Date.now() > cached.expiresAt) {
       await client.del(OTP_KEY(email));
-      return res.status(400).json({ error: "OTP expired" });
+      return res
+        .status(400)
+        .json({ error: "This code has expired. Please request a new one." });
     }
 
     const attempts = await client.incr(OTP_ATTEMPTS(email));
-
-    if (attempts > 5) {
+    if (attempts > OTP_MAX_VERIFY_ATTEMPTS) {
       await client.del(OTP_KEY(email));
-      return res.status(429).json({ error: "Locked" });
+      await client.del(OTP_ATTEMPTS(email));
+      return res.status(429).json({
+        error: "Too many incorrect attempts. Please request a new code.",
+      });
     }
 
-    const incomingHash = crypto.createHash("sha256").update(otp).digest("hex");
-    const valid = safeCompareHex(cached.hash, incomingHash);
-
+    const valid = safeCompareHex(cached.hash, hashOtp(otp));
     if (!valid) {
       return res.status(400).json({
-        error: "Invalid OTP",
-        attemptsRemaining: Math.max(0, 5 - attempts),
+        error: "Incorrect code. Please try again.",
+        attemptsRemaining: Math.max(0, OTP_MAX_VERIFY_ATTEMPTS - attempts),
       });
     }
 
     const userId = cached.userId;
 
-    // Confirm the email now that the OTP has actually been verified.
+    // Confirm the email now that the OTP is verified.
     const { error: confirmError } =
       await supabaseAdmin.auth.admin.updateUserById(userId, {
         email_confirm: true,
       });
-
     if (confirmError) throw confirmError;
 
-    // Create the identity row + the chosen role extension. The role
-    // table insert fires the trigger that populates profiles.roles[].
+    // Create the identity row + the chosen role extension (the role table
+    // insert fires the trigger that populates profiles.roles[]).
     await provisionRole({
       userId,
       email,
@@ -303,33 +391,36 @@ const verifyRegisterOtp = async (req, res) => {
 
     await client.del(OTP_KEY(email));
     await client.del(OTP_ATTEMPTS(email));
+    await client.del(RESEND_CD(email));
 
     return res.status(201).json({
       success: true,
       user: { id: userId, email, roles, activeRole, isAdmin },
     });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "OTP verify failed" });
+    console.error("verifyRegisterOtp error:", err);
+    return res.status(500).json({ error: "Verification failed" });
   }
 };
 
 // ─────────────────────────────────────────────
 // Phase 3: Sign In
 // ─────────────────────────────────────────────
-
 const signIn = async (req, res) => {
   try {
     let { email, password } = req.body;
-
     email = normalizeEmail(email);
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
 
     const client = getClient();
     const failKey = LOGIN_FAIL(email);
 
-    if (await client.get(`login_lock:${email}`)) {
+    if (await client.get(LOGIN_LOCK(email))) {
       return res.status(429).json({
-        error: "Account temporarily locked. Try again later.",
+        error: "Account temporarily locked. Please try again later.",
       });
     }
 
@@ -340,20 +431,20 @@ const signIn = async (req, res) => {
 
     if (error) {
       const attempts = await client.incr(failKey);
-      await client.expire(failKey, 900);
+      await client.expire(failKey, LOGIN_LOCK_SECONDS);
 
-      if (attempts >= 10) {
-        await client.set(`login_lock:${email}`, "1", { EX: 900 });
+      if (attempts >= LOGIN_MAX_ATTEMPTS) {
+        await client.set(LOGIN_LOCK(email), "1", { EX: LOGIN_LOCK_SECONDS });
       }
 
       return res.status(401).json({
-        error: "Invalid credentials",
-        attemptsRemaining: Math.max(0, 10 - attempts),
+        error: "Invalid email or password",
+        attemptsRemaining: Math.max(0, LOGIN_MAX_ATTEMPTS - attempts),
       });
     }
 
     await client.del(failKey);
-    await client.del(`login_lock:${email}`);
+    await client.del(LOGIN_LOCK(email));
 
     const { roles, activeRole, isAdmin } = await loadRoleState(data.user.id);
 
@@ -363,7 +454,7 @@ const signIn = async (req, res) => {
       user: { id: data.user.id, email, roles, activeRole, isAdmin },
     });
   } catch (err) {
-    console.error(err);
+    console.error("signIn error:", err);
     return res.status(500).json({ error: "Sign in failed" });
   }
 };
@@ -371,11 +462,6 @@ const signIn = async (req, res) => {
 // ─────────────────────────────────────────────
 // Add a secondary role (signed-in, no OTP)
 // ─────────────────────────────────────────────
-//
-// The caller is already authenticated (requireAuth populated req.user)
-// and their email is already verified, so there is nothing to re-verify.
-// We just provision the new role extension row and switch their active
-// role to it. Rejects if they already hold that role.
 const addRole = async (req, res) => {
   try {
     const { role } = req.body;
@@ -389,11 +475,9 @@ const addRole = async (req, res) => {
       return res.status(409).json({ error: `Already registered as ${role}` });
     }
 
-    // Ensure an identity row exists (it should for any verified account),
-    // then add the role extension and make it the active role.
     const { data: existingProfile } = await supabaseAdmin
       .from("profiles")
-      .select("user_id, full_name, student_id")
+      .select("user_id")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -405,14 +489,12 @@ const addRole = async (req, res) => {
     const { error: roleError } = await supabaseAdmin
       .from(table)
       .upsert({ user_id: user.id }, { onConflict: "user_id" });
-
     if (roleError) throw roleError;
 
     const { error: activeError } = await supabaseAdmin
       .from("profiles")
       .update({ active_role: role, updated_at: new Date().toISOString() })
       .eq("user_id", user.id);
-
     if (activeError) throw activeError;
 
     const { roles, activeRole, isAdmin } = await loadRoleState(user.id);
@@ -422,13 +504,14 @@ const addRole = async (req, res) => {
       user: { id: user.id, email: user.email, roles, activeRole, isAdmin },
     });
   } catch (err) {
-    console.error(err);
+    console.error("addRole error:", err);
     return res.status(500).json({ error: "Failed to add role" });
   }
 };
 
 module.exports = {
   initiateRegister,
+  resendOtp,
   verifyRegisterOtp,
   signIn,
   addRole,
