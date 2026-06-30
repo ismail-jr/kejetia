@@ -1,13 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import {
-  motion,
-  useMotionValue,
-  useTransform,
-  animate,
-  useInView,
-} from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { motion, useMotionValue, useTransform, animate, useInView } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
@@ -19,6 +13,7 @@ import {
   Briefcase,
   CheckCircle,
 } from "lucide-react";
+import { fetchPlatformStats, type PlatformStats } from "@/lib/data/platform-stats";
 
 const FEATURES_GRID = [
   {
@@ -47,48 +42,41 @@ const FEATURES_GRID = [
   },
 ];
 
-const STATS = [
-  { target: 500, suffix: "+", label: "Active Students", icon: Users },
-  { target: 120, suffix: "+", label: "Services Listed", icon: Briefcase },
-  {
-    target: 4.8,
-    suffix: "",
-    label: "Average Rating",
-    icon: Star,
-    isDecimal: true,
-  },
-  { target: 98, suffix: "%", label: "Satisfaction Rate", icon: CheckCircle },
-];
-
-// Reusable Counter Component using clean high-performance MotionValues
 function Counter({
   target,
   suffix,
   isDecimal,
+  loading,
 }: {
   target: number;
   suffix: string;
   isDecimal?: boolean;
+  loading?: boolean;
 }) {
   const nodeRef = useRef<HTMLSpanElement>(null);
   const count = useMotionValue(0);
   const isInView = useInView(nodeRef, { once: true, margin: "-100px" });
 
-  // Dynamically format numbers as decimals or clean integers during the animation sequence
   const rounded = useTransform(count, (latest) =>
     isDecimal ? latest.toFixed(1) : Math.floor(latest).toString(),
   );
 
   useEffect(() => {
-    if (!isInView) return;
+    if (!isInView || loading) return;
 
     const controls = animate(count, target, {
       duration: 2.2,
-      ease: [0.16, 1, 0.3, 1], // Smooth out-quint easing curve
+      ease: [0.16, 1, 0.3, 1],
     });
 
     return () => controls.stop();
-  }, [count, target, isInView]);
+  }, [count, target, isInView, loading]);
+
+  if (loading) {
+    return (
+      <span className="inline-block w-16 h-7 rounded-md bg-muted animate-pulse" />
+    );
+  }
 
   return (
     <span ref={nodeRef} className="text-2xl font-bold text-foreground">
@@ -98,41 +86,91 @@ function Counter({
   );
 }
 
+function buildStatsFromData(stats: PlatformStats) {
+  return [
+    {
+      target: stats.activeUsers,
+      suffix: stats.activeUsers > 0 ? "+" : "",
+      label: "Active Students",
+      icon: Users,
+    },
+    {
+      target: stats.servicesListed,
+      suffix: stats.servicesListed > 0 ? "+" : "",
+      label: "Services Listed",
+      icon: Briefcase,
+    },
+    {
+      target: stats.averageRating,
+      suffix: "",
+      label: "Average Rating",
+      icon: Star,
+      isDecimal: true,
+    },
+    {
+      target: stats.successRate,
+      suffix: "%",
+      label: "Success Rate",
+      icon: CheckCircle,
+    },
+  ];
+}
+
 const headerContainer = {
   hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.2, delayChildren: 0.1 },
-  },
+  visible: { transition: { staggerChildren: 0.2, delayChildren: 0.1 } },
 };
-
 const gridContainer = {
   hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.15, delayChildren: 0.1 },
-  },
+  visible: { transition: { staggerChildren: 0.15, delayChildren: 0.1 } },
 };
-
 const statsContainer = {
   hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.12, delayChildren: 0.05 },
-  },
+  visible: { transition: { staggerChildren: 0.12, delayChildren: 0.05 } },
 };
-
 const itemVariants = {
   hidden: { opacity: 0, scale: 0.92, y: 18 },
   visible: {
     opacity: 1,
     scale: 1,
     y: 0,
-    transition: {
-      duration: 0.7,
-      ease: [0.16, 1, 0.3, 1] as const,
-    },
+    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] as const },
   },
 };
 
 export function FeaturesSection() {
+  const [stats, setStats] = useState<PlatformStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchPlatformStats()
+      .then((data) => {
+        if (!cancelled) setStats(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load platform stats:", err);
+        if (!cancelled) {
+          setStats({
+            activeUsers: 0,
+            servicesListed: 0,
+            averageRating: 0,
+            successRate: 0,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const statsRow = stats ? buildStatsFromData(stats) : [];
+
   return (
     <section className="py-20 bg-muted/30 border-y border-border/40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -190,7 +228,6 @@ export function FeaturesSection() {
           })}
         </motion.div>
 
-        {/* Stats Row with Animated Number Counters */}
         <motion.div
           className="grid grid-cols-2 lg:grid-cols-4 gap-8 mt-12 pt-8 border-t border-border/40"
           initial="hidden"
@@ -198,27 +235,40 @@ export function FeaturesSection() {
           viewport={{ once: true, amount: 0.3 }}
           variants={statsContainer}
         >
-          {STATS.map(({ target, suffix, label, icon: Icon, isDecimal }) => (
-            <motion.div
-              key={label}
-              variants={itemVariants}
-              className="text-center"
-            >
-              <div className="flex justify-center mb-2">
-                <Icon className="w-5 h-5 text-primary" />
-              </div>
-              <div className="text-2xl font-bold text-foreground">
-                <Counter
-                  target={target}
-                  suffix={suffix}
-                  isDecimal={isDecimal}
-                />
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                {label}
-              </div>
-            </motion.div>
-          ))}
+          {loading
+            ? [1, 2, 3, 4].map((i) => (
+                <motion.div key={i} variants={itemVariants} className="text-center">
+                  <div className="flex justify-center mb-2">
+                    <div className="w-5 h-5 rounded bg-muted animate-pulse" />
+                  </div>
+                  <div className="flex justify-center">
+                    <span className="inline-block w-16 h-7 rounded-md bg-muted animate-pulse" />
+                  </div>
+                  <div className="w-20 h-3 rounded bg-muted animate-pulse mx-auto mt-2" />
+                </motion.div>
+              ))
+            : statsRow.map(({ target, suffix, label, icon: Icon, isDecimal }) => (
+                <motion.div
+                  key={label}
+                  variants={itemVariants}
+                  className="text-center"
+                >
+                  <div className="flex justify-center mb-2">
+                    <Icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="text-2xl font-bold text-foreground">
+                    <Counter
+                      target={target}
+                      suffix={suffix}
+                      isDecimal={isDecimal}
+                      loading={loading}
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {label}
+                  </div>
+                </motion.div>
+              ))}
         </motion.div>
       </div>
     </section>
