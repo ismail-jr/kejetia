@@ -96,15 +96,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ["student", "provider", "admin"].includes(r),
     ) as UserRole[];
 
+    const adminFlag = p.is_admin === true || validRoles.includes("admin");
+
     const determinedRoles =
-      validRoles.length > 0 ? validRoles : ["student" as UserRole];
+      adminFlag && !validRoles.includes("admin")
+        ? ([...validRoles, "admin"] as UserRole[])
+        : validRoles.length > 0
+          ? validRoles
+          : adminFlag
+            ? (["admin"] as UserRole[])
+            : (["student"] as UserRole[]);
 
     const determinedActive =
       p.active_role && ["student", "provider", "admin"].includes(p.active_role)
         ? (p.active_role as UserRole)
-        : (determinedRoles[0] as UserRole);
-
-    const adminFlag = p.is_admin === true || determinedRoles.includes("admin");
+        : adminFlag
+          ? "admin"
+          : (determinedRoles[0] as UserRole);
 
     setProfile(p);
     setRoles(determinedRoles);
