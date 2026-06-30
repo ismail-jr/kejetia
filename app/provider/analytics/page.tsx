@@ -38,7 +38,7 @@ export default function ProviderAnalyticsPage() {
 
       setLoading(true);
       try {
-        const userId = profile.user_id || profile.id;
+        const userId = profile.user_id;
 
         // 1. Fetch bookings
         const { data: bookingsData, error: bookingsError } = await supabase

@@ -32,6 +32,8 @@ export interface BackendAuthResponse {
   };
 }
 
+export type AddableRole = "student" | "provider";
+
 export const authService = {
   // Phase 1: Initiate OTP
   async initiateRegister(payload: RegisterPayload) {
@@ -73,6 +75,27 @@ export const authService = {
 
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Sign in failed");
+    return data;
+  },
+
+  // Add a secondary role to the signed-in account. No OTP — the email is
+  // already verified — but the caller must pass their current session
+  // access token so the backend can authenticate the request.
+  async addRole(
+    role: AddableRole,
+    accessToken: string,
+  ): Promise<BackendAuthResponse> {
+    const response = await fetch(`${BACKEND_URL}/api/auth/role/add`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ role }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Failed to add role");
     return data;
   },
 };

@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { authService, RegisterPayload } from "@/lib/api/auth";
+import { authService, RegisterPayload, AddableRole } from "@/lib/api/auth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Database } from "@/lib/database.types";
@@ -34,6 +34,7 @@ interface AuthContextType {
   registerUser: (data: RegisterPayload) => Promise<void>;
   verifyOtp: (email: string, token: string) => Promise<AuthResponse>;
   signIn: (email: string, password: string) => Promise<AuthResponse>;
+  addRole: (role: AddableRole) => Promise<AuthResponse>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -266,6 +267,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Add a second role (e.g. an existing student unlocking the provider
+  // view) to the already signed-in account. Requires a live session —
+  // the backend authenticates via the access token and skips OTP since
+  // the email is already verified.
+  const addRole = async (role: AddableRole): Promise<AuthResponse> => {
+    setIsAuthLoading(true);
+    try {
+      const {
+        data: { session: current },
+      } = await supabase.auth.getSession();
+
+      const accessToken = current?.access_token;
+      if (!accessToken) {
+        throw new Error("You must be signed in to add a role.");
+      }
+
+      const result = await authService.addRole(role, accessToken);
+
+      if (!result.user) {
+        throw new Error("Add-role payload missing user details.");
+      }
+
+      const rawUser = result.user;
+      const determinedRoles = (rawUser.roles || roles) as UserRole[];
+      const determinedActive = (rawUser.active_role ||
+        rawUser.activeRole ||
+        role) as UserRole;
+      const adminFlag =
+        rawUser.is_admin === true ||
+        rawUser.isAdmin === true ||
+        determinedRoles.includes("admin");
+
+      setRoles(determinedRoles);
+      setActiveRoleState(determinedActive);
+      setIsAdmin(adminFlag);
+
+      if (user?.id) {
+        const p = await fetchProfile(user.id);
+        if (p) setProfile(p);
+      }
+
+      toast.success(`Your ${role} profile is ready.`);
+
+      return {
+        roles: determinedRoles,
+        activeRole: determinedActive,
+        isAdmin: adminFlag,
+      };
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add role");
+      throw err;
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
   const registerUser = async (data: RegisterPayload) => {
     setIsAuthLoading(true);
     try {
@@ -402,6 +459,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         registerUser,
         verifyOtp,
         signIn,
+        addRole,
       }}
     >
       {children}

@@ -2,6 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Merriweather, Plus_Jakarta_Sans } from "next/font/google";
 import { AuthProvider } from "@/contexts/auth-context";
+import { QueryProvider } from "@/contexts/query-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "./theme-provider";
 import "react-day-picker/dist/style.css";
@@ -35,17 +36,19 @@ export default function RootLayout({
         className={`${jakarta.variable} ${merriweather.variable} antialiased`}
         suppressHydrationWarning
       >
-        <AuthProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="light"
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-            <Toaster richColors position="top-right" />
-          </ThemeProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="light"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+              <Toaster richColors position="top-right" />
+            </ThemeProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );
