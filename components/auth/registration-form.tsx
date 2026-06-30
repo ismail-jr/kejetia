@@ -30,7 +30,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { useRouter } from "next/navigation";
+import { AuthApiError } from "@/lib/api/auth";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 // When an already signed-in user is unlocking a second role we don't
@@ -111,12 +112,30 @@ function getStrength(password: string): {
 }
 
 export function RegistrationForm() {
-  const { registerUser, addRole, isAuthLoading, user } = useAuth();
+  const { registerUser, addRole, addRoleWithCredentials, isAuthLoading, user, profile, roles } =
+    useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const roleFromUrl = searchParams.get("role");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const isAddingSecondaryRole = !!user;
+
+  // When signed in, default to the role they don't have yet.
+  const defaultRole = (() => {
+    if (
+      roleFromUrl === "provider" ||
+      roleFromUrl === "student"
+    ) {
+      return roleFromUrl;
+    }
+    if (user && roles.length > 0) {
+      if (!roles.includes("provider")) return "provider" as const;
+      if (!roles.includes("student")) return "student" as const;
+    }
+    return "student" as const;
+  })();
 
   const {
     register,
@@ -128,10 +147,10 @@ export function RegistrationForm() {
   } = useForm<FormData>({
     resolver: zodResolver(makeSchema(!isAddingSecondaryRole)),
     values: {
-      role: (user ? "provider" : "student") as "student" | "provider",
-      email: user?.email || "",
-      full_name: (user?.user_metadata?.full_name as string) || "",
-      student_id: (user?.user_metadata?.student_id as string) || "",
+      role: defaultRole,
+      email: user?.email || profile?.email || "",
+      full_name: profile?.full_name || "",
+      student_id: profile?.student_id || "",
       password: "",
       confirm_password: "",
     },
@@ -153,21 +172,44 @@ export function RegistrationForm() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      // Existing, signed-in user unlocking a second role: no new account,
-      // no OTP, no password — handled by the authenticated add-role flow.
+      // Signed-in user unlocking a second role (no password / OTP).
       if (isAddingSecondaryRole) {
+        if (roles.includes(data.role)) {
+          toast.error(`You already have the ${data.role} role.`);
+          router.push(`/${data.role}/dashboard`);
+          return;
+        }
         const result = await addRole(data.role);
         router.push(`/${result.activeRole}/dashboard`);
         return;
       }
 
-      await registerUser({
-        email: data.email,
-        password: data.password,
-        fullName: data.full_name || "",
-        studentId: data.student_id || "",
-        role: data.role,
-      });
+      // Brand-new registration (OTP flow).
+      try {
+        await registerUser({
+          email: data.email,
+          password: data.password,
+          fullName: data.full_name || "",
+          studentId: data.student_id || "",
+          role: data.role,
+        });
+      } catch (initErr) {
+        // Same email already registered as student — unlock provider (or
+        // vice versa) with the password they just entered. No OTP needed.
+        if (
+          initErr instanceof AuthApiError &&
+          initErr.code === "ADD_ROLE_WITH_PASSWORD"
+        ) {
+          const result = await addRoleWithCredentials(
+            data.email,
+            data.password,
+            data.role,
+          );
+          router.push(`/${result.activeRole}/dashboard`);
+          return;
+        }
+        throw initErr;
+      }
     } catch (error: any) {
       console.error("Registration processing error caught:", error);
 
@@ -196,12 +238,21 @@ export function RegistrationForm() {
         errorMessage.includes("already exists");
 
       if (isConflict) {
+        const alreadyHasRole =
+          error instanceof AuthApiError &&
+          error.code === "ROLE_ALREADY_EXISTS";
+        if (alreadyHasRole) {
+          toast.info("You already have this role. Redirecting to sign in.");
+          router.push(`/login?email=${encodeURIComponent(data.email)}`);
+          return;
+        }
         setError("email", {
           type: "manual",
           message: `This email is already registered as a ${data.role}.`,
         });
-        toast.error("Account Creation Failed", {
-          description: `An account with this email already exists under the ${data.role} profile layer. Please sign in instead.`,
+        toast.error("Account already exists", {
+          description:
+            "Use the same password on this form to unlock your other role, or sign in.",
           duration: 6000,
         });
       } else {
@@ -242,8 +293,8 @@ export function RegistrationForm() {
         </h1>
         <p className="text-muted-foreground text-xs">
           {isAddingSecondaryRole
-            ? "Add a new operating profile layer using your current student identity"
-            : "Join the dual-role UCC student marketplace"}
+            ? "Add a provider or student profile to your existing UCC account"
+            : "Join the dual-role UCC student marketplace — one email, two workspaces"}
         </p>
       </div>
 

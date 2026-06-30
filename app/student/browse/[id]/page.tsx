@@ -16,6 +16,7 @@ import { ProviderProfile } from "../components/provider-profile";
 import { ServiceMetadata } from "../components/service-matadata";
 import { PricingInfoBox } from "../components/pricing-info-box";
 import BookingModal from "@/components/booking/booking-modal";
+import { isOwnService } from "@/lib/utils/booking";
 
 type PricingType = "fixed" | "hourly" | "negotiable";
 
@@ -168,6 +169,8 @@ export default function ServiceDetailPage() {
 
   if (!service) return null;
 
+  const isOwner = isOwnService(user?.id, service.provider_id);
+
   const getPriceIcon = () => {
     const pricingType = service.pricing_type || "fixed";
     switch (pricingType) {
@@ -276,14 +279,25 @@ export default function ServiceDetailPage() {
               {/* Pricing Info */}
               <PricingInfoBox pricingType={service.pricing_type || "fixed"} />
 
-              {/* Book Button - Now opens modal instead of navigating */}
-              <Button
-                size="lg"
-                className="w-full font-bold rounded-xl text-sm shadow-md py-6 active:scale-[0.99] transition"
-                onClick={() => setIsBookingModalOpen(true)}
-              >
-                Book This Service
-              </Button>
+              {/* Book — providers cannot book their own listings */}
+              {isOwner ? (
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  className="w-full font-bold rounded-xl text-sm py-6"
+                  asChild
+                >
+                  <Link href="/provider/services">Manage Your Listing</Link>
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  className="w-full font-bold rounded-xl text-sm shadow-md py-6 active:scale-[0.99] transition"
+                  onClick={() => setIsBookingModalOpen(true)}
+                >
+                  Book This Service
+                </Button>
+              )}
             </div>
           </div>
         </div>

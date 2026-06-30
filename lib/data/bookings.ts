@@ -32,6 +32,10 @@ export async function listProviderBookings(
 }
 
 export async function createBooking(input: BookingInsert): Promise<Booking> {
+  if (input.client_id === input.provider_id) {
+    throw new Error("You cannot book your own service.");
+  }
+
   const { data, error } = await db
     .from("bookings")
     .insert(input)

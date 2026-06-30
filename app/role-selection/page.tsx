@@ -94,6 +94,29 @@ export default function RoleSelectionPage() {
           </button>
         )}
       </div>
+
+      {/* Unlock the other role on the same UCC email */}
+      {(!roles.includes("student") || !roles.includes("provider")) && (
+        <div className="mt-8 text-center">
+          <p className="text-sm text-muted-foreground mb-3">
+            {!roles.includes("provider")
+              ? "Want to offer services on campus?"
+              : "Want to browse and book peer services?"}
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                `/register?role=${!roles.includes("provider") ? "provider" : "student"}`,
+              )
+            }
+            className="text-sm font-semibold text-primary hover:underline"
+          >
+            Unlock {!roles.includes("provider") ? "Provider" : "Student"} role
+            on this account
+          </button>
+        </div>
+      )}
     </div>
   );
 }

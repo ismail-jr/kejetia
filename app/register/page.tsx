@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { Suspense } from "react";
 import { Shield, Users, TrendingUp, Star } from "lucide-react";
 import { RegistrationForm } from "@/components/auth/registration-form";
 
@@ -91,7 +92,9 @@ export default function RegisterPage() {
       {/* RIGHT PANEL - Form Container */}
       <div className="flex items-center justify-center p-6 lg:p-12 overflow-y-auto h-full">
         <div className="w-full max-w-md">
-          <RegistrationForm />
+          <Suspense fallback={<div className="h-96 animate-pulse bg-muted/30 rounded-xl" />}>
+            <RegistrationForm />
+          </Suspense>
         </div>
       </div>
     </div>
