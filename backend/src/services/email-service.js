@@ -144,4 +144,91 @@ const sendOtpEmail = async (toEmail, otpCode, expiryMinutes = 10) => {
   }
 };
 
-module.exports = { sendOtpEmail, verifyTransporter };
+// ─────────────────────────────────────────────
+// Verification success email
+// ─────────────────────────────────────────────
+
+const roleLabel = (role) => (role === "provider" ? "Provider" : "Student");
+
+const roleNextStep = (role) =>
+  role === "provider"
+    ? "Sign in and head to your provider dashboard to set up your profile and list your first service."
+    : "Sign in and start browsing campus services from your student dashboard.";
+
+const verificationSuccessTemplate = (fullName, role) => {
+  const firstName = (fullName || "there").trim().split(/\s+/)[0];
+  const workspace = roleLabel(role);
+
+  return `
+  <div style="background-color: #f7f8fa; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; min-height: 100%;">
+    <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; padding: 36px; border: 1px solid #e1e4ea; border-radius: 16px; box-shadow: 0 4px 12px rgba(12, 25, 45, 0.03);">
+
+      <div style="margin-bottom: 28px;">
+        <span style="color: #a3143c; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;">Kejetia</span>
+      </div>
+
+      <div style="background-color: #ecfdf3; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
+        <p style="margin: 0; color: #166534; font-size: 15px; font-weight: 600;">
+          ✓ Your email has been verified
+        </p>
+      </div>
+
+      <h2 style="color: #0c192d; font-size: 24px; font-weight: 700; margin-top: 0; margin-bottom: 12px; letter-spacing: -0.025em;">
+        Welcome to Kejetia, ${firstName}!
+      </h2>
+
+      <p style="color: #536479; font-size: 15px; line-height: 1.6; margin-bottom: 16px; margin-top: 0;">
+        Great news — your verification code was accepted and your <strong style="color: #0c192d;">${workspace}</strong> account is ready to go.
+      </p>
+
+      <p style="color: #536479; font-size: 15px; line-height: 1.6; margin-bottom: 24px; margin-top: 0;">
+        ${roleNextStep(role)}
+      </p>
+
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${process.env.APP_URL || "https://kejetia.app"}/login"
+           style="display: inline-block; background-color: #a3143c; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; padding: 14px 28px; border-radius: 10px;">
+          Sign in to Kejetia
+        </a>
+      </div>
+
+      <div style="border-top: 1px solid #e1e4ea; margin-top: 32px; padding-top: 20px;">
+        <p style="color: #8a99ad; font-size: 12px; line-height: 1.5; margin: 0;">
+          You’re receiving this because you just completed registration on Kejetia. If this wasn’t you, please contact support right away.
+        </p>
+      </div>
+
+    </div>
+  </div>
+`;
+};
+
+// Sent after OTP verification succeeds. Non-blocking for the API — a failed
+// delivery is logged but does not roll back an already-verified account.
+const sendVerificationSuccessEmail = async (toEmail, fullName, role = "student") => {
+  const workspace = roleLabel(role);
+  const firstName = (fullName || "there").trim().split(/\s+/)[0];
+  const loginUrl = `${process.env.APP_URL || "https://kejetia.app"}/login`;
+
+  const mailOptions = {
+    from: `"Kejetia" <${FROM_ADDRESS}>`,
+    to: toEmail,
+    subject: `You're all set, ${firstName}! Your Kejetia account is verified`,
+    text:
+      `Hi ${firstName},\n\n` +
+      `Your email has been verified and your ${workspace} account on Kejetia is ready.\n\n` +
+      `${roleNextStep(role)}\n\n` +
+      `Sign in here: ${loginUrl}\n\n` +
+      `— The Kejetia team`,
+    html: verificationSuccessTemplate(fullName, role),
+  };
+
+  try {
+    await getTransporter().sendMail(mailOptions);
+  } catch (err) {
+    console.error("[email] Failed to send verification success email:", err.message);
+    throw new Error("Failed to send verification success email");
+  }
+};
+
+module.exports = { sendOtpEmail, sendVerificationSuccessEmail, verifyTransporter };

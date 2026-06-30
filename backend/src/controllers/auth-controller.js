@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const supabaseAdmin = require("../config/supabase");
 const { getClient } = require("../config/redis");
-const { sendOtpEmail } = require("../services/email-service");
+const { sendOtpEmail, sendVerificationSuccessEmail } = require("../services/email-service");
 
 // ─────────────────────────────────────────────
 // Institutional email allowlist
@@ -449,6 +449,15 @@ const verifyRegisterOtp = async (req, res) => {
     await client.del(OTP_KEY(email));
     await client.del(OTP_ATTEMPTS(email));
     await client.del(RESEND_CD(email));
+
+    try {
+      await sendVerificationSuccessEmail(email, cached.fullName, cached.role);
+    } catch (mailErr) {
+      console.warn(
+        "verifyRegisterOtp: account verified but success email failed:",
+        mailErr.message,
+      );
+    }
 
     return res.status(201).json({
       success: true,
