@@ -32,7 +32,7 @@ import {
 } from "./components/constants";
 
 export default function CreateServicePage() {
-  const { user, profile } = useAuth();
+  const { user, roles } = useAuth();
   const router = useRouter();
 
   const [tags, setTags] = useState<string[]>([]);
@@ -126,12 +126,13 @@ export default function CreateServicePage() {
   };
 
   const onSubmit = async (data: ServiceFormData) => {
-    if (!user || !profile) {
+    if (!user) {
       toast.error("Please login to create a service");
       return;
     }
-    if (profile.active_role !== "provider") {
-      toast.error("Only providers can create services");
+    if (!roles.includes("provider")) {
+      toast.error("Unlock the provider role on your account to list services");
+      router.push("/register?role=provider");
       return;
     }
     if (images.length === 0) {
