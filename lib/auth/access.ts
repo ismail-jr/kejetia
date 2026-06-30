@@ -20,11 +20,17 @@ export function parseProfileAccess(profile: {
   );
 
   const isAdmin = profile.is_admin === true || roles.includes("admin");
-  const activeRole = resolveActiveRole(profile.active_role, roles, isAdmin);
+  const normalizedRoles =
+    isAdmin && !roles.includes("admin") ? [...roles, "admin" as AppRole] : roles;
+  const activeRole = resolveActiveRole(
+    profile.active_role,
+    normalizedRoles,
+    isAdmin,
+  );
 
   return {
     userId: profile.user_id,
-    roles,
+    roles: normalizedRoles,
     activeRole,
     isAdmin,
   };
