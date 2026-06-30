@@ -171,24 +171,15 @@ const loadRoleState = async (userId) => {
 };
 
 const provisionRole = async ({ userId, email, fullName, studentId, role }) => {
-  const { error: profileError } = await supabaseAdmin.from("profiles").upsert(
-    {
-      user_id: userId,
-      email,
-      full_name: fullName,
-      student_id: studentId,
-      active_role: role,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" },
-  );
-  if (profileError) throw profileError;
-
-  const table = ROLE_TABLE[role];
-  const { error: roleError } = await supabaseAdmin
-    .from(table)
-    .upsert({ user_id: userId }, { onConflict: "user_id" });
-  if (roleError) throw roleError;
+  const { error } = await supabaseAdmin.rpc("provision_user_role", {
+    p_user_id: userId,
+    p_role: role,
+    p_email: email,
+    p_full_name: fullName,
+    p_student_id: studentId || null,
+    p_set_active_role: true,
+  });
+  if (error) throw error;
 };
 
 // Generates a fresh OTP, persists its hash + the pending-registration
@@ -568,17 +559,12 @@ const addRole = async (req, res) => {
       return res.status(400).json({ error: "Profile not found" });
     }
 
-    const table = ROLE_TABLE[role];
-    const { error: roleError } = await supabaseAdmin
-      .from(table)
-      .upsert({ user_id: user.id }, { onConflict: "user_id" });
+    const { error: roleError } = await supabaseAdmin.rpc("provision_user_role", {
+      p_user_id: user.id,
+      p_role: role,
+      p_set_active_role: true,
+    });
     if (roleError) throw roleError;
-
-    const { error: activeError } = await supabaseAdmin
-      .from("profiles")
-      .update({ active_role: role, updated_at: new Date().toISOString() })
-      .eq("user_id", user.id);
-    if (activeError) throw activeError;
 
     const { roles, activeRole, isAdmin } = await loadRoleState(user.id);
 
@@ -648,17 +634,12 @@ const addRoleWithCredentials = async (req, res) => {
       return res.status(400).json({ error: "Profile not found" });
     }
 
-    const table = ROLE_TABLE[role];
-    const { error: roleError } = await supabaseAdmin
-      .from(table)
-      .upsert({ user_id: existingUser.id }, { onConflict: "user_id" });
+    const { error: roleError } = await supabaseAdmin.rpc("provision_user_role", {
+      p_user_id: existingUser.id,
+      p_role: role,
+      p_set_active_role: true,
+    });
     if (roleError) throw roleError;
-
-    const { error: activeError } = await supabaseAdmin
-      .from("profiles")
-      .update({ active_role: role, updated_at: new Date().toISOString() })
-      .eq("user_id", existingUser.id);
-    if (activeError) throw activeError;
 
     const { roles, activeRole, isAdmin } = await loadRoleState(existingUser.id);
 
