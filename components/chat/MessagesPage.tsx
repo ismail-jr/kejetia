@@ -12,13 +12,16 @@ import {
   getOrCreateDirectConversation,
   type ConversationListItem,
   type MessageWithSender,
+  type ConversationParticipantProfile,
 } from "@/lib/messaging-data";
 import { getPartySummaries } from "@/lib/data/profiles";
+import { NewChatDialog } from "@/components/chat/NewChatDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Send, MessageSquare } from "lucide-react";
+import { Send, MessageSquare, Plus } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface ActivePartner {
@@ -51,6 +54,7 @@ export default function MessagesPage() {
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [newChatOpen, setNewChatOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchConversations = useCallback(async () => {
@@ -60,6 +64,7 @@ export default function MessagesPage() {
       setConversations(convos);
     } catch (err) {
       console.error("Failed to load conversations:", err);
+      toast.error("Failed to load conversations");
     } finally {
       setLoading(false);
     }
@@ -76,12 +81,31 @@ export default function MessagesPage() {
         fetchConversations();
       } catch (err) {
         console.error("Failed to open conversation:", err);
+        toast.error("Failed to open conversation");
       }
     },
     [fetchConversations],
   );
 
-  // Deep-link: ?with=<userId> opens (or creates) a direct conversation.
+  const startChatWithUser = useCallback(
+    async (partner: ConversationParticipantProfile) => {
+      if (!user) return;
+      try {
+        const convId = await getOrCreateDirectConversation(partner.user_id);
+        await openConversation(convId, {
+          user_id: partner.user_id,
+          full_name: partner.full_name,
+          avatar_url: partner.avatar_url,
+        });
+        await fetchConversations();
+      } catch (err) {
+        console.error("Failed to start conversation:", err);
+        toast.error("Could not start conversation");
+      }
+    },
+    [user, openConversation, fetchConversations],
+  );
+
   const initWithUser = useCallback(
     async (targetId: string) => {
       if (!user) return;
@@ -103,6 +127,7 @@ export default function MessagesPage() {
         await openConversation(convId, partner);
       } catch (err) {
         console.error("Failed to start conversation:", err);
+        toast.error("Could not open conversation");
       }
     },
     [user, openConversation],
@@ -116,9 +141,9 @@ export default function MessagesPage() {
     if (withUserId) initWithUser(withUserId);
   }, [withUserId, initWithUser]);
 
-  // Realtime: append newly inserted messages for the open conversation.
   useEffect(() => {
     if (!user || !activeConvId) return;
+
     const channel = supabase
       .channel(`messages:${activeConvId}`)
       .on(
@@ -129,20 +154,41 @@ export default function MessagesPage() {
           table: "messages",
           filter: `conversation_id=eq.${activeConvId}`,
         },
-        (payload) => {
+        async (payload) => {
           const incoming = payload.new as MessageWithSender;
+          if (incoming.sender_id === user.id) return;
+
+          let sender: ActivePartner | null = null;
+          try {
+            const summaries = await getPartySummaries([incoming.sender_id]);
+            const profile = summaries.get(incoming.sender_id);
+            if (profile) {
+              sender = {
+                user_id: profile.user_id,
+                full_name: profile.full_name,
+                avatar_url: profile.avatar_url,
+              };
+            }
+          } catch {
+            // Non-fatal — message still shows without sender name
+          }
+
           setMessages((prev) =>
             prev.some((m) => m.id === incoming.id)
               ? prev
-              : [...prev, { ...incoming, sender: null }],
+              : [...prev, { ...incoming, sender }],
           );
+
+          await markConversationRead(activeConvId);
+          fetchConversations();
         },
       )
       .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, activeConvId]);
+  }, [user, activeConvId, fetchConversations]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -160,203 +206,251 @@ export default function MessagesPage() {
       fetchConversations();
     } catch (err) {
       console.error("Failed to send message:", err);
+      toast.error("Failed to send message");
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <div className="h-[calc(100vh-12rem)] flex gap-0 bg-card rounded-2xl border border-border overflow-hidden">
-      {/* Conversations list */}
-      <div
-        className={cn(
-          "w-full sm:w-72 lg:w-80 border-r border-border flex flex-col",
-          activeConvId ? "hidden sm:flex" : "flex",
-        )}
-      >
-        <div className="p-4 border-b border-border">
-          <h2 className="font-semibold text-foreground">Messages</h2>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="p-4 space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-14 rounded-xl animate-shimmer" />
-              ))}
-            </div>
-          ) : conversations.length === 0 ? (
-            <div className="text-center py-12 px-4">
-              <MessageSquare className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                No conversations yet
-              </p>
-            </div>
-          ) : (
-            conversations.map((conv) => (
-              <button
-                key={conv.id}
-                onClick={() =>
-                  openConversation(
-                    conv.id,
-                    conv.otherParticipant
-                      ? {
-                          user_id: conv.otherParticipant.user_id,
-                          full_name: conv.otherParticipant.full_name,
-                          avatar_url: conv.otherParticipant.avatar_url,
-                        }
-                      : null,
-                  )
-                }
-                className={cn(
-                  "w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors text-left",
-                  activeConvId === conv.id && "bg-muted",
-                )}
-              >
-                <Avatar className="w-10 h-10 flex-shrink-0">
-                  <AvatarImage
-                    src={conv.otherParticipant?.avatar_url || undefined}
-                  />{" "}
-                  <AvatarFallback className="bg-primary text-white text-sm font-bold">
-                    {initials(conv.otherParticipant?.full_name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-sm text-foreground truncate">
-                      {conv.otherParticipant?.full_name || "Unknown"}
-                    </span>
-                    {conv.lastMessage && (
-                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                        {format(
-                          new Date(conv.lastMessage.created_at),
-                          "HH:mm",
-                        )}
+    <>
+      <div className="h-[calc(100vh-12rem)] flex gap-0 bg-card rounded-2xl border border-border overflow-hidden">
+        <div
+          className={cn(
+            "w-full sm:w-72 lg:w-80 border-r border-border flex flex-col",
+            activeConvId ? "hidden sm:flex" : "flex",
+          )}
+        >
+          <div className="p-4 border-b border-border flex items-center justify-between gap-2">
+            <h2 className="font-semibold text-foreground">Messages</h2>
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl h-8 gap-1.5"
+              onClick={() => setNewChatOpen(true)}
+            >
+              <Plus className="w-4 h-4" />
+              New
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="p-4 space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-14 rounded-xl animate-shimmer" />
+                ))}
+              </div>
+            ) : conversations.length === 0 ? (
+              <div className="text-center py-12 px-4">
+                <MessageSquare className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground mb-4">
+                  No conversations yet
+                </p>
+                <Button
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => setNewChatOpen(true)}
+                >
+                  Start a chat
+                </Button>
+              </div>
+            ) : (
+              conversations.map((conv) => (
+                <button
+                  key={conv.id}
+                  type="button"
+                  onClick={() =>
+                    openConversation(
+                      conv.id,
+                      conv.otherParticipant
+                        ? {
+                            user_id: conv.otherParticipant.user_id,
+                            full_name: conv.otherParticipant.full_name,
+                            avatar_url: conv.otherParticipant.avatar_url,
+                          }
+                        : null,
+                    )
+                  }
+                  className={cn(
+                    "w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors text-left",
+                    activeConvId === conv.id && "bg-muted",
+                  )}
+                >
+                  <Avatar className="w-10 h-10 flex-shrink-0">
+                    <AvatarImage
+                      src={conv.otherParticipant?.avatar_url || undefined}
+                    />
+                    <AvatarFallback className="bg-primary text-white text-sm font-bold">
+                      {initials(conv.otherParticipant?.full_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm text-foreground truncate">
+                        {conv.otherParticipant?.full_name || "Unknown"}
                       </span>
+                      {conv.lastMessage && (
+                        <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                          {format(
+                            new Date(conv.lastMessage.created_at),
+                            "HH:mm",
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    {conv.lastMessage && (
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                        {conv.lastMessage.sender_id === user?.id
+                          ? `You: ${conv.lastMessage.content || "Attachment"}`
+                          : conv.lastMessage.content || "Attachment"}
+                      </p>
                     )}
                   </div>
-                  {conv.lastMessage && (
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">
-                      {conv.lastMessage.content || "Attachment"}
-                    </p>
+                  {conv.unreadCount > 0 && (
+                    <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-white text-xs font-bold">
+                        {conv.unreadCount}
+                      </span>
+                    </div>
                   )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "flex-1 flex flex-col",
+            !activeConvId ? "hidden sm:flex" : "flex",
+          )}
+        >
+          {!activeConvId ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center px-4">
+                <MessageSquare className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="font-semibold text-foreground mb-1">
+                  Select a conversation
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Message a student or provider in a private 1:1 chat
+                </p>
+                <Button
+                  className="rounded-xl"
+                  onClick={() => setNewChatOpen(true)}
+                >
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  New message
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="p-4 border-b border-border flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveConvId(null);
+                    setActivePartner(null);
+                    setMessages([]);
+                  }}
+                  className="sm:hidden mr-1 text-muted-foreground"
+                >
+                  ←
+                </button>
+                <Avatar className="w-9 h-9">
+                  <AvatarImage src={activePartner?.avatar_url || undefined} />
+                  <AvatarFallback className="bg-primary text-white text-sm font-bold">
+                    {initials(activePartner?.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold text-sm text-foreground">
+                    {activePartner?.full_name || "Conversation"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Direct message
+                  </p>
                 </div>
-                {conv.unreadCount > 0 && (
-                  <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-xs font-bold">
-                      {conv.unreadCount}
-                    </span>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {messages.length === 0 ? (
+                  <div className="h-full flex items-center justify-center">
+                    <p className="text-sm text-muted-foreground">
+                      Say hello to start the conversation
+                    </p>
                   </div>
+                ) : (
+                  messages.map((msg) => {
+                    const isMine = msg.sender_id === user?.id;
+                    return (
+                      <div
+                        key={msg.id}
+                        className={cn(
+                          "flex",
+                          isMine ? "justify-end" : "justify-start",
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm",
+                            isMine
+                              ? "bg-primary text-white rounded-br-md"
+                              : "bg-muted text-foreground rounded-bl-md",
+                          )}
+                        >
+                          <p>{msg.content}</p>
+                          <p
+                            className={cn(
+                              "text-xs mt-1",
+                              isMine
+                                ? "text-white/60"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {format(new Date(msg.created_at), "HH:mm")}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
-              </button>
-            ))
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div className="p-4 border-t border-border flex gap-2">
+                <Input
+                  placeholder="Type a message..."
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  className="rounded-xl h-10"
+                />
+                <Button
+                  onClick={handleSend}
+                  disabled={!messageText.trim() || sending}
+                  size="icon"
+                  className="h-10 w-10 rounded-xl shadow-primary flex-shrink-0"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* Chat window */}
-      <div
-        className={cn(
-          "flex-1 flex flex-col",
-          !activeConvId ? "hidden sm:flex" : "flex",
-        )}
-      >
-        {!activeConvId ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <MessageSquare className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="font-semibold text-foreground mb-1">
-                Select a conversation
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Choose a conversation from the list to start messaging
-              </p>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Chat header */}
-            <div className="p-4 border-b border-border flex items-center gap-3">
-              <button
-                onClick={() => setActiveConvId(null)}
-                className="sm:hidden mr-1 text-muted-foreground"
-              >
-                ←
-              </button>
-              <Avatar className="w-9 h-9">
-                <AvatarImage src={activePartner?.avatar_url || undefined} />{" "}
-                <AvatarFallback className="bg-primary text-white text-sm font-bold">
-                  {initials(activePartner?.full_name)}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-semibold text-sm text-foreground">
-                  {activePartner?.full_name || "Conversation"}
-                </p>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.map((msg) => {
-                const isMine = msg.sender_id === user?.id;
-                return (
-                  <div
-                    key={msg.id}
-                    className={cn(
-                      "flex",
-                      isMine ? "justify-end" : "justify-start",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm",
-                        isMine
-                          ? "bg-primary text-white rounded-br-md"
-                          : "bg-muted text-foreground rounded-bl-md",
-                      )}
-                    >
-                      <p>{msg.content}</p>
-                      <p
-                        className={cn(
-                          "text-xs mt-1",
-                          isMine ? "text-white/60" : "text-muted-foreground",
-                        )}
-                      >
-                        {format(new Date(msg.created_at), "HH:mm")}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className="p-4 border-t border-border flex gap-2">
-              <Input
-                placeholder="Type a message..."
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                className="rounded-xl h-10"
-              />
-              <Button
-                onClick={handleSend}
-                disabled={!messageText.trim() || sending}
-                size="icon"
-                className="h-10 w-10 rounded-xl shadow-primary flex-shrink-0"
-              >
-                <Send className="w-4 h-4" />
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+      <NewChatDialog
+        open={newChatOpen}
+        onOpenChange={setNewChatOpen}
+        onSelectUser={startChatWithUser}
+      />
+    </>
   );
 }

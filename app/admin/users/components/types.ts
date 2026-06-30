@@ -22,5 +22,12 @@ export const ROLE_STYLES: Record<string, string> = {
   admin: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
 };
 
-export const TABS = ["all", "student", "provider", "admin"] as const;
+export const TABS = [
+  "all",
+  "student",
+  "provider",
+  "admin",
+  "verified",
+  "unverified",
+] as const;
 export type FilterTab = (typeof TABS)[number];

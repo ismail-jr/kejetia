@@ -445,3 +445,35 @@ export async function deleteMessageForMe(messageId: string): Promise<void> {
 
   if (error) throw error;
 }
+
+// Search profiles the current user can start a direct 1:1 chat with.
+export async function searchMessageableUsers(
+  query: string,
+  limit = 12,
+): Promise<ConversationParticipantProfile[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  let q = supabase
+    .from("profiles")
+    .select("user_id, full_name, avatar_url")
+    .neq("user_id", user.id)
+    .order("full_name", { ascending: true })
+    .limit(limit);
+
+  const trimmed = query.trim();
+  if (trimmed) {
+    q = q.or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`);
+  }
+
+  const { data, error } = await q;
+  if (error) throw error;
+
+  return (data ?? []).map((p) => ({
+    user_id: p.user_id,
+    full_name: p.full_name,
+    avatar_url: p.avatar_url,
+  }));
+}
