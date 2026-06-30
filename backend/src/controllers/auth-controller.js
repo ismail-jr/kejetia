@@ -233,8 +233,20 @@ const initiateRegister = async (req, res) => {
       // adding another role is a signed-in action — send them to login.
       const { roles, isAdmin } = await loadRoleState(existingUser.id);
       if (roles.length > 0 || isAdmin) {
+        if (await hasRole(existingUser.id, role)) {
+          return res.status(409).json({
+            error: `You already have a ${role} account. Please sign in.`,
+            code: "ROLE_ALREADY_EXISTS",
+          });
+        }
+        // Same email, new role — client should call /role/add-with-credentials
+        // with the existing password (no OTP; email already verified).
         return res.status(409).json({
-          error: "Already registered. Please sign in to add another role.",
+          error:
+            "You already have an account with this email. Enter your password to unlock the other role.",
+          code: "ADD_ROLE_WITH_PASSWORD",
+          existingRoles: roles,
+          requestedRole: role,
         });
       }
       // Otherwise this is an abandoned registration (auth user exists but
@@ -531,10 +543,99 @@ const addRole = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────
+// Add a secondary role with email + password (logged out)
+// ─────────────────────────────────────────────
+//
+// Lets a student who already registered unlock the provider role (or vice
+// versa) from the registration page using their existing credentials —
+// no OTP, because the email was verified at first registration.
+const addRoleWithCredentials = async (req, res) => {
+  try {
+    let { email, password, role } = req.body;
+    email = normalizeEmail(email);
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ error: "Invalid role" });
+    }
+
+    const existingUser = await findUserByEmail(email);
+    if (!existingUser) {
+      return res.status(404).json({
+        error: "No account found with this email. Please register first.",
+      });
+    }
+
+    if (await hasRole(existingUser.id, role)) {
+      return res.status(409).json({
+        error: `You already have the ${role} role. Please sign in.`,
+        code: "ROLE_ALREADY_EXISTS",
+      });
+    }
+
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      return res.status(401).json({
+        error: "Invalid email or password",
+      });
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("user_id")
+      .eq("user_id", existingUser.id)
+      .maybeSingle();
+
+    if (!profile) {
+      return res.status(400).json({ error: "Profile not found" });
+    }
+
+    const table = ROLE_TABLE[role];
+    const { error: roleError } = await supabaseAdmin
+      .from(table)
+      .upsert({ user_id: existingUser.id }, { onConflict: "user_id" });
+    if (roleError) throw roleError;
+
+    const { error: activeError } = await supabaseAdmin
+      .from("profiles")
+      .update({ active_role: role, updated_at: new Date().toISOString() })
+      .eq("user_id", existingUser.id);
+    if (activeError) throw activeError;
+
+    const { roles, activeRole, isAdmin } = await loadRoleState(existingUser.id);
+
+    return res.status(201).json({
+      success: true,
+      session: data.session,
+      user: {
+        id: existingUser.id,
+        email,
+        roles,
+        activeRole,
+        isAdmin,
+      },
+    });
+  } catch (err) {
+    console.error("addRoleWithCredentials error:", err);
+    return res.status(500).json({
+      error: "Failed to add role",
+      details: errorDetails(err),
+    });
+  }
+};
+
 module.exports = {
   initiateRegister,
   resendOtp,
   verifyRegisterOtp,
   signIn,
   addRole,
+  addRoleWithCredentials,
 };

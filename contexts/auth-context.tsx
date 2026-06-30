@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { authService, RegisterPayload, AddableRole } from "@/lib/api/auth";
+import { authService, RegisterPayload, AddableRole, AuthApiError } from "@/lib/api/auth";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Database } from "@/lib/database.types";
@@ -36,6 +36,11 @@ interface AuthContextType {
   resendOtp: (email: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<AuthResponse>;
   addRole: (role: AddableRole) => Promise<AuthResponse>;
+  addRoleWithCredentials: (
+    email: string,
+    password: string,
+    role: AddableRole,
+  ) => Promise<AuthResponse>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -145,6 +150,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setActiveRoleState(role);
   };
 
+  // Sync role state (+ optional session) from a backend auth response.
+  const applyBackendAuthResult = async (
+    result: Awaited<ReturnType<typeof authService.signIn>>,
+    fallbackActiveRole?: UserRole,
+  ): Promise<AuthResponse> => {
+    if (!result.user) {
+      throw new Error("Authentication payload missing user details.");
+    }
+
+    if (result.session?.access_token) {
+      const {
+        data: { session: newSession },
+        error,
+      } = await supabase.auth.setSession({
+        access_token: result.session.access_token,
+        refresh_token: result.session.refresh_token ?? "",
+      });
+      if (error) throw new Error(error.message);
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
+    }
+
+    const rawUser = result.user;
+    const determinedRoles = (rawUser.roles || ["student"]) as UserRole[];
+    const determinedActive = (rawUser.active_role ||
+      rawUser.activeRole ||
+      fallbackActiveRole ||
+      determinedRoles[0] ||
+      "student") as UserRole;
+    const adminFlag =
+      rawUser.is_admin === true ||
+      rawUser.isAdmin === true ||
+      determinedRoles.includes("admin");
+
+    setRoles(determinedRoles);
+    setActiveRoleState(determinedActive);
+    setIsAdmin(adminFlag);
+
+    const p = await fetchProfile(rawUser.id);
+    if (p) setProfile(p);
+
+    return {
+      roles: determinedRoles,
+      activeRole: determinedActive,
+      isAdmin: adminFlag,
+    };
+  };
+
   const signIn = async (
     email: string,
     password: string,
@@ -152,49 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthLoading(true);
     try {
       const result = await authService.signIn(email, password);
-
-      if (!result.user) {
-        throw new Error("Authentication payload missing user details.");
-      }
-
-      if (result.session?.access_token) {
-        const {
-          data: { session: newSession },
-          error,
-        } = await supabase.auth.setSession({
-          access_token: result.session.access_token,
-          refresh_token: result.session.refresh_token ?? "",
-        });
-        if (error) throw new Error(error.message);
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-      }
-
-      const rawUser = result.user;
-      const determinedRoles = (rawUser.roles || ["student"]) as UserRole[];
-
-      const determinedActive = (rawUser.active_role ||
-        rawUser.activeRole ||
-        determinedRoles[0] ||
-        "student") as UserRole;
-      const adminFlag =
-        rawUser.is_admin === true ||
-        rawUser.isAdmin === true ||
-        determinedRoles.includes("admin");
-
-      setRoles(determinedRoles);
-      setActiveRoleState(determinedActive);
-      setIsAdmin(adminFlag);
-
-      fetchProfile(rawUser.id).then((p) => {
-        if (p) setProfile(p);
-      });
-
-      return {
-        roles: determinedRoles,
-        activeRole: determinedActive,
-        isAdmin: adminFlag,
-      };
+      return await applyBackendAuthResult(result);
     } catch (error) {
       console.error("Context signIn error execution:", error);
       throw error;
@@ -324,6 +335,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const addRoleWithCredentials = async (
+    email: string,
+    password: string,
+    role: AddableRole,
+  ): Promise<AuthResponse> => {
+    setIsAuthLoading(true);
+    try {
+      const result = await authService.addRoleWithCredentials(
+        email,
+        password,
+        role,
+      );
+      const auth = await applyBackendAuthResult(result, role);
+      toast.success(`Your ${role} profile is ready.`);
+      return auth;
+    } catch (err: any) {
+      toast.error(err.message || "Failed to unlock role");
+      throw err;
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
   // Resends the registration OTP via the backend (custom mail flow).
   const resendOtp = async (email: string) => {
     const res = await authService.resendRegister(email);
@@ -338,7 +372,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       toast.success(res.message || "Verification code sent!");
       router.push(`/verify?email=${encodeURIComponent(data.email)}`);
     } catch (err: any) {
-      toast.error(err.message || "Registration failed");
+      if (
+        !(err instanceof AuthApiError && err.code === "ADD_ROLE_WITH_PASSWORD")
+      ) {
+        toast.error(err.message || "Registration failed");
+      }
       throw err;
     } finally {
       setIsAuthLoading(false);
@@ -468,6 +506,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         resendOtp,
         signIn,
         addRole,
+        addRoleWithCredentials,
       }}
     >
       {children}

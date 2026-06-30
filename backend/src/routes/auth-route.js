@@ -7,6 +7,7 @@ const {
   verifyRegisterOtp,
   signIn,
   addRole,
+  addRoleWithCredentials,
 } = require("../controllers/auth-controller");
 
 const { loginLimiter } = require("../middleware/rate-limit");
@@ -21,6 +22,9 @@ router.post("/register/resend", otpSendLimit, resendOtp);
 router.post("/register/verify", otpVerifyLimit, verifyRegisterOtp);
 
 router.post("/signin", loginLimiter, loginEmailLock, signIn);
+
+// Unlock a second role using existing email + password (no session required).
+router.post("/role/add-with-credentials", loginLimiter, addRoleWithCredentials);
 
 // Add a secondary role to an already signed-in, email-verified account.
 // No OTP — authentication is proven by the bearer token (requireAuth).

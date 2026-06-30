@@ -1,12 +1,39 @@
 // lib/api/auth.ts
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-// Builds an Error from a failed response body, appending the backend's
-// `details` (e.g. the underlying Postgres error) when present so problems
-// like an unmigrated schema are visible instead of a generic message.
-function apiError(data: any, fallback: string): Error {
+export class AuthApiError extends Error {
+  code?: string;
+  existingRoles?: string[];
+  requestedRole?: string;
+  status?: number;
+
+  constructor(
+    message: string,
+    extras?: {
+      code?: string;
+      existingRoles?: string[];
+      requestedRole?: string;
+      status?: number;
+    },
+  ) {
+    super(message);
+    this.name = "AuthApiError";
+    this.code = extras?.code;
+    this.existingRoles = extras?.existingRoles;
+    this.requestedRole = extras?.requestedRole;
+    this.status = extras?.status;
+  }
+}
+
+function apiError(data: any, fallback: string, status?: number): AuthApiError {
   const base = data?.error || fallback;
-  return new Error(data?.details ? `${base}: ${data.details}` : base);
+  const message = data?.details ? `${base}: ${data.details}` : base;
+  return new AuthApiError(message, {
+    code: data?.code,
+    existingRoles: data?.existingRoles,
+    requestedRole: data?.requestedRole,
+    status,
+  });
 }
 
 export interface RegisterPayload {
@@ -52,7 +79,8 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok) throw apiError(data, "Failed to initiate registration");
+    if (!response.ok)
+      throw apiError(data, "Failed to initiate registration", response.status);
     return data;
   },
 
@@ -67,7 +95,8 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok) throw apiError(data, "Failed to resend verification code");
+    if (!response.ok)
+      throw apiError(data, "Failed to resend verification code", response.status);
     return data;
   },
 
@@ -83,7 +112,8 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok) throw apiError(data, "Invalid or expired code");
+    if (!response.ok)
+      throw apiError(data, "Invalid or expired code", response.status);
     return data;
   },
 
@@ -96,7 +126,28 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok) throw apiError(data, "Sign in failed");
+    if (!response.ok) throw apiError(data, "Sign in failed", response.status);
+    return data;
+  },
+
+  // Unlock a second role with existing email + password (logged out).
+  async addRoleWithCredentials(
+    email: string,
+    password: string,
+    role: AddableRole,
+  ): Promise<BackendAuthResponse> {
+    const response = await fetch(
+      `${BACKEND_URL}/api/auth/role/add-with-credentials`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, role }),
+      },
+    );
+
+    const data = await response.json();
+    if (!response.ok)
+      throw apiError(data, "Failed to unlock role", response.status);
     return data;
   },
 
@@ -117,7 +168,7 @@ export const authService = {
     });
 
     const data = await response.json();
-    if (!response.ok) throw apiError(data, "Failed to add role");
+    if (!response.ok) throw apiError(data, "Failed to add role", response.status);
     return data;
   },
 };
