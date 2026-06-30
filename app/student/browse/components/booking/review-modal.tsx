@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Star } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +20,26 @@ interface ReviewModalProps {
   onSubmit: (rating: number, comment: string) => Promise<void>;
   isSubmitting: boolean;
 }
+
+// Custom Star SVG component
+const StarIcon = ({
+  className,
+  filled,
+}: {
+  className?: string;
+  filled?: boolean;
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    className={className}
+  >
+    <path
+      fill={filled ? "orange" : "#9ca3af"}
+      d="M9.6 15.65L12 13.8l2.4 1.85l-.9-3.05l2.25-1.6h-2.8L12 7.9l-.95 3.1h-2.8l2.25 1.6zM5.825 21l2.325-7.6L2 9h7.6L12 1l2.4 8H22l-6.15 4.4l2.325 7.6L12 16.3zM12 11.775"
+    />
+  </svg>
+);
 
 export function ReviewModal({
   target,
@@ -59,14 +78,14 @@ export function ReviewModal({
                   type="button"
                   aria-label={`Rate ${r} out of 5 stars`}
                   aria-pressed={r === rating}
+                  className="transition-transform hover:scale-110"
                 >
-                  <Star
+                  <StarIcon
                     className={cn(
-                      "w-8 h-8 transition-all",
-                      r <= rating
-                        ? "fill-amber-400 text-amber-400"
-                        : "text-muted-foreground hover:text-amber-300",
+                      "w-8 h-8 transition-all duration-300",
+                      r <= rating ? "scale-110" : "opacity-40 hover:opacity-70",
                     )}
+                    filled={r <= rating}
                   />
                 </button>
               ))}

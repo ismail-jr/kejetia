@@ -130,7 +130,7 @@ export default function BookingModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60  p-4">
       <div className="bg-background border border-border w-full max-w-2xl rounded-2xl shadow-xl flex flex-col max-h-[90vh]">
         <BookingModalHeader
           step={step}

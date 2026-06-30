@@ -11,6 +11,7 @@ import { EarningsSummary } from "./components/earning-summary";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TrendingUp, Calendar, BarChart3 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ProviderAnalyticsPage() {
   const { profile } = useAuth();
@@ -178,6 +179,80 @@ export default function ProviderAnalyticsPage() {
     fetchAnalytics();
   }, [profile]);
 
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        {/* Header Skeleton */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <Skeleton className="h-10 w-64" />
+            <Skeleton className="h-5 w-48 mt-2" />
+          </div>
+          <Skeleton className="h-10 w-36 rounded-xl" />
+        </div>
+
+        {/* Stats Cards Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-card rounded-2xl border border-border/60 p-6 min-h-[140px]"
+            >
+              <Skeleton className="h-4 w-24 mb-4" />
+              <Skeleton className="h-8 w-20 mb-2" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+          ))}
+        </div>
+
+        {/* Earnings Summary Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-card rounded-xl border border-border/60 p-4"
+            >
+              <Skeleton className="h-4 w-32 mb-2" />
+              <Skeleton className="h-8 w-40" />
+            </div>
+          ))}
+        </div>
+
+        {/* Chart & Activity Skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <div className="bg-card rounded-2xl border border-border/60 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-8 w-32" />
+              </div>
+              <div className="h-80 flex items-center justify-center">
+                <Skeleton className="h-64 w-full" />
+              </div>
+            </div>
+          </div>
+          <div className="lg:col-span-1">
+            <div className="bg-card rounded-2xl border border-border/60 p-6 h-full">
+              <Skeleton className="h-6 w-40 mb-6" />
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <div className="flex-1">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24 mt-1" />
+                    </div>
+                    <Skeleton className="h-6 w-16" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -241,18 +316,6 @@ export default function ProviderAnalyticsPage() {
           </Card>
         </div>
       </div>
-
-      {/* Loading Overlay */}
-      {loading && (
-        <div className="fixed inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-card rounded-2xl p-8 shadow-lg flex flex-col items-center gap-4">
-            <div className="w-12 h-12 rounded-full border-4 border-primary/30 border-t-primary animate-spin" />
-            <p className="text-sm text-muted-foreground">
-              Loading your analytics...
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
