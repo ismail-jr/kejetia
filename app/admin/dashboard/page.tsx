@@ -35,8 +35,8 @@ export default function AdminDashboard() {
     const fetchData = async () => {
       const [usersRes, servicesRes, pendingRes, reportsRes] = await Promise.all(
         [
-          supabase.from("profiles").select("id", { count: "exact" }),
-          supabase.from("services").select("id", { count: "exact" }),
+          supabase.from("profiles").select("*", { count: "exact", head: true }),
+          supabase.from("services").select("*", { count: "exact", head: true }),
           supabase
             .from("services")
             .select("*, profiles(full_name)")

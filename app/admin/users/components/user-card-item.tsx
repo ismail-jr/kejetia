@@ -7,27 +7,40 @@ import {
   ShieldAlert,
   UserCheck,
   UserX,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { Profile, ROLE_STYLES } from "./types";
 
 interface UserCardItemProps {
   user: Profile;
+  verifying?: boolean;
   onUpdateRole: (
     userId: string,
-    currentRole: string,
     targetRole: "student" | "provider" | "admin",
   ) => void;
-  onToggleVerified: (userId: string, currentStatus: boolean) => void;
+  onSetVerified: (userId: string, verified: boolean) => void;
 }
 
 export function UserCardItem({
   user,
+  verifying = false,
   onUpdateRole,
-  onToggleVerified,
+  onSetVerified,
 }: UserCardItemProps) {
   const initials =
     user.full_name
@@ -99,15 +112,13 @@ export function UserCardItem({
               size="icon"
               variant="ghost"
               type="button"
-              title="Set Active context to Student"
+              title="Set active context to Student"
               className={cn(
                 "w-7 h-7 rounded-lg",
                 activeSessionRole === "student" &&
                   "bg-blue-500/10 text-blue-600 dark:text-blue-400",
               )}
-              onClick={() =>
-                onUpdateRole(coreUserId, activeSessionRole, "student")
-              }
+              onClick={() => onUpdateRole(coreUserId, "student")}
             >
               <GraduationCap className="w-3.5 h-3.5 stroke-[2]" />
             </Button>
@@ -115,60 +126,85 @@ export function UserCardItem({
               size="icon"
               variant="ghost"
               type="button"
-              title="Set Active context to Provider"
+              title="Set active context to Provider"
               className={cn(
                 "w-7 h-7 rounded-lg",
                 activeSessionRole === "provider" &&
                   "bg-amber-500/10 text-amber-600 dark:text-amber-400",
               )}
-              onClick={() =>
-                onUpdateRole(coreUserId, activeSessionRole, "provider")
-              }
+              onClick={() => onUpdateRole(coreUserId, "provider")}
             >
               <Briefcase className="w-3.5 h-3.5 stroke-[2]" />
             </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              type="button"
-              title="Set Active context to Admin"
-              className={cn(
-                "w-7 h-7 rounded-lg",
-                activeSessionRole === "admin" &&
-                  "bg-red-500/10 text-red-600 dark:text-red-400",
-              )}
-              onClick={() =>
-                onUpdateRole(coreUserId, activeSessionRole, "admin")
-              }
-            >
-              <ShieldAlert className="w-3.5 h-3.5 stroke-[2]" />
-            </Button>
+            {user.is_admin && (
+              <Button
+                size="icon"
+                variant="ghost"
+                type="button"
+                title="Set active context to Admin"
+                className={cn(
+                  "w-7 h-7 rounded-lg",
+                  activeSessionRole === "admin" &&
+                    "bg-red-500/10 text-red-600 dark:text-red-400",
+                )}
+                onClick={() => onUpdateRole(coreUserId, "admin")}
+              >
+                <ShieldAlert className="w-3.5 h-3.5 stroke-[2]" />
+              </Button>
+            )}
           </div>
 
-          <Button
-            size="sm"
-            variant={isVerified ? "outline" : "ghost"}
-            type="button"
-            className={cn(
-              "h-8 px-3 rounded-xl text-xs flex gap-1.5 font-heading font-medium",
-              !isVerified && "hover:bg-primary/5 hover:text-primary",
-            )}
-            onClick={() => onToggleVerified(coreUserId, isVerified)}
-          >
-            {isVerified ? (
-              <>
-                <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                  Verified
-                </span>
-              </>
-            ) : (
-              <>
-                <UserX className="w-3.5 h-3.5 text-muted-foreground/60" />
-                <span>Verify</span>
-              </>
-            )}
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant={isVerified ? "outline" : "default"}
+                type="button"
+                disabled={verifying}
+                className={cn(
+                  "h-8 px-3 rounded-xl text-xs flex gap-1.5 font-heading font-medium",
+                  !isVerified && "shadow-primary",
+                )}
+              >
+                {verifying ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : isVerified ? (
+                  <>
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                      Verified
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <UserX className="w-3.5 h-3.5" />
+                    <span>Verify user</span>
+                  </>
+                )}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="rounded-2xl">
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {isVerified ? "Remove verification?" : "Verify this user?"}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {isVerified
+                    ? `This will remove the verified badge from ${user.full_name || user.email}. They will no longer appear as a verified UCC peer.`
+                    : `Confirm that ${user.full_name || user.email} is a legitimate UCC student or provider. Verified users display a trust badge across the platform.`}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="rounded-xl"
+                  onClick={() => onSetVerified(coreUserId, !isVerified)}
+                >
+                  {isVerified ? "Remove verification" : "Verify user"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
     </div>
