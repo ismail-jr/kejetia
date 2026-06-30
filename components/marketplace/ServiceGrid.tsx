@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Heart, Clock, DollarSign, TrendingUp, Star } from "lucide-react";
 import Link from "next/link";
 import BookingModal from "../booking/booking-modal";
+import { useAuth } from "@/contexts/auth-context";
+import { isOwnService } from "@/lib/utils/booking";
 
 interface ServiceProvider {
   full_name: string;
@@ -116,6 +118,8 @@ function ServiceCard({
   onSaveToggle: (serviceId: string, saved: boolean) => void;
   onBookClick: (service: Service) => void;
 }) {
+  const { user } = useAuth();
+  const isOwner = isOwnService(user?.id, service.provider_id);
   const getPriceDisplay = () => {
     const price =
       typeof service.price === "number"
@@ -295,13 +299,22 @@ function ServiceCard({
             View Details
           </Link>
 
-          <button
-            type="button"
-            onClick={() => onBookClick(service)}
-            className="block text-center w-full bg-primary text-primary-foreground text-xs font-semibold py-2 px-3 rounded-lg hover:bg-primary/90 transition shadow-sm active:scale-[0.98]"
-          >
-            Book Now
-          </button>
+          {isOwner ? (
+            <Link
+              href="/provider/services"
+              className="block text-center w-full bg-secondary text-secondary-foreground border border-muted text-xs font-semibold py-2 px-3 rounded-lg hover:bg-secondary/80 transition shadow-sm active:scale-[0.98]"
+            >
+              Your Listing
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onBookClick(service)}
+              className="block text-center w-full bg-primary text-primary-foreground text-xs font-semibold py-2 px-3 rounded-lg hover:bg-primary/90 transition shadow-sm active:scale-[0.98]"
+            >
+              Book Now
+            </button>
+          )}
         </div>
       </div>
     </div>

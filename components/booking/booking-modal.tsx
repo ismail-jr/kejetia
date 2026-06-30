@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { getProviderPublicProfile, createBooking } from "@/lib/data";
+import { isOwnService } from "@/lib/utils/booking";
 import { toast } from "sonner";
 import { BookingModalHeader } from "./modal-header";
 import { Step1CalendarSelection } from "./step1-calendar";
@@ -83,6 +84,11 @@ export default function BookingModal({
       } = await supabase.auth.getUser();
       if (!user) {
         toast.error("Please login to log your booking order request.");
+        return;
+      }
+
+      if (isOwnService(user.id, providerId)) {
+        toast.error("You cannot book your own service.");
         return;
       }
 
