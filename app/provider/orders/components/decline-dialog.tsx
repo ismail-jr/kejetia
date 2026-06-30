@@ -29,6 +29,9 @@ export function DeclineOrderDialog({
 }: DeclineOrderDialogProps) {
   const amount = Number((order.total_amount ?? order.base_amount) || 0);
 
+  const student = order.client ?? order.student;
+  const service = order.service ?? order.services;
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md rounded-2xl">
@@ -42,7 +45,7 @@ export function DeclineOrderDialog({
               <DialogDescription className="text-sm mt-1">
                 Are you sure you want to decline this order from{" "}
                 <span className="font-semibold text-foreground">
-                  {order.student?.full_name || "Student"}
+                  {student?.full_name || "Student"}
                 </span>
                 ?
               </DialogDescription>
@@ -54,13 +57,13 @@ export function DeclineOrderDialog({
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Service</span>
             <span className="font-medium text-foreground">
-              {order.services?.title || "Service"}
+              {service?.title || "Service"}
             </span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Student</span>
             <span className="font-medium text-foreground">
-              {order.student?.full_name || "Unknown"}
+              {student?.full_name || "Unknown"}
             </span>
           </div>
           <div className="flex justify-between text-sm">

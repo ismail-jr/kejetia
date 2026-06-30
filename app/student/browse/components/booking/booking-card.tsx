@@ -11,32 +11,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { Database } from "@/lib/database.types";
+import type { ClientBookingWithDetails } from "@/lib/data/bookings";
+import { isReviewEligible } from "@/lib/data/bookings";
 import { CancelBookingDialog } from "./cancel-booking";
 
-type Service = Database["public"]["Tables"]["services"]["Row"];
-type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-
-export interface BookingWithDetails {
-  id: string;
-  service_id: string;
-  client_id: string;
-  provider_id: string;
-  status: string;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-  appointment_date: string;
-  appointment_time: string;
-  base_amount: string;
-  total_amount: string;
-  payment_status: string;
-  payment_term: string;
-  service?: Service | null;
-  provider?: Pick<Profile, "full_name" | "avatar_url" | "location"> | null;
-}
+export type BookingWithDetails = ClientBookingWithDetails;
 
 const STATUS_MAP: Record<string, { label: string; style: string }> = {
   pending: {
@@ -77,9 +57,9 @@ export function BookingCard({
 
   const status = STATUS_MAP[booking.status] || STATUS_MAP.pending;
   const serviceImage = booking.service?.images?.[0];
-  const rawRating = Number(booking.service?.avg_rating || 0);
-  const hasRating = rawRating > 0;
-  const reviewCount = booking.service?.total_reviews || 0;
+  const canReview = isReviewEligible(booking, booking.hasReview);
+  const hasSubmittedReview = booking.hasReview;
+  const reviewRating = booking.reviewRating;
 
   const handleCancel = async () => {
     setIsCancelling(true);
@@ -139,25 +119,30 @@ export function BookingCard({
             <div
               className={cn(
                 "font-bold text-sm px-2.5 py-1.5 rounded-lg flex items-center justify-center min-w-[36px]",
-                hasRating
+                hasSubmittedReview
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground",
               )}
             >
-              {hasRating ? rawRating.toFixed(1) : "—"}
+              {hasSubmittedReview && reviewRating ? reviewRating.toFixed(1) : "—"}
             </div>
             <div className="text-xs">
               <p className="font-bold text-foreground leading-none mb-0.5">
-                {!hasRating
-                  ? "New"
-                  : rawRating >= 4.5
-                    ? "Outstanding"
-                    : "Great"}
+                {hasSubmittedReview
+                  ? "You reviewed this"
+                  : booking.status === "completed" &&
+                      booking.payment_status !== "paid"
+                    ? "Awaiting payment"
+                    : "Not reviewed"}
               </p>
               <p className="text-muted-foreground leading-none">
-                {hasRating
-                  ? `${reviewCount} review${reviewCount === 1 ? "" : "s"}`
-                  : "No reviews yet"}
+                {hasSubmittedReview
+                  ? "Thanks for your feedback"
+                  : canReview
+                    ? "Leave a review when ready"
+                    : booking.status === "completed"
+                      ? "Review opens after payment"
+                      : "Review after completion"}
               </p>
             </div>
           </div>
@@ -224,7 +209,7 @@ export function BookingCard({
             </Button>
 
             <div className="flex gap-1.5">
-              {booking.status === "completed" && (
+              {canReview && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -232,7 +217,19 @@ export function BookingCard({
                   onClick={() => onOpenReview(booking)}
                 >
                   <Star className="w-3 h-3 mr-1 text-amber-500 fill-amber-500" />
-                  Review
+                  Leave Review
+                </Button>
+              )}
+
+              {hasSubmittedReview && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full rounded-xl text-xs h-8 bg-card text-muted-foreground"
+                  disabled
+                >
+                  <Star className="w-3 h-3 mr-1 text-amber-500 fill-amber-500" />
+                  Reviewed
                 </Button>
               )}
 
