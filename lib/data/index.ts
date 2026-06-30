@@ -11,3 +11,4 @@ export * from "@/lib/data/bookings";
 export * from "@/lib/data/reviews";
 export * from "@/lib/data/notifications";
 export * from "@/lib/data/admin-analytics";
+export * from "@/lib/data/platform-stats";
