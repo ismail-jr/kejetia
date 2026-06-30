@@ -58,7 +58,10 @@ export default function AdminListingDetailPage({
     if (!service) return;
     setSubmitting(true);
 
-    const payload: Record<string, any> = { status };
+    const payload: {
+      status: "approved" | "rejected" | "archived";
+      rejection_reason?: string;
+    } = { status };
     if (status === "rejected") payload.rejection_reason = reason;
 
     const { error } = await supabase

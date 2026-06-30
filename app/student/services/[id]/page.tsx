@@ -36,11 +36,11 @@ import type { Database } from "@/lib/database.types";
 
 type Service = Database["public"]["Tables"]["services"]["Row"] & {
   profiles?: {
-    id: string;
+    user_id: string;
     full_name: string;
-    avatar_url: string;
+    avatar_url: string | null;
     is_verified: boolean;
-    bio: string;
+    bio: string | null;
   };
 };
 type Review = Database["public"]["Tables"]["reviews"]["Row"] & {
@@ -69,7 +69,7 @@ export default function ServiceDetailPage() {
       const [serviceRes, reviewsRes] = await Promise.all([
         supabase
           .from("services")
-          .select("*, profiles(id, full_name, avatar_url, is_verified, bio)")
+          .select("*, profiles:provider_id(user_id, full_name, avatar_url, is_verified, bio)")
           .eq("id", id)
           .maybeSingle(),
         supabase
@@ -373,7 +373,7 @@ export default function ServiceDetailPage() {
               </h3>
               <div className="flex items-center gap-3 mb-3">
                 <Avatar className="w-10 h-10">
-                  <AvatarImage src={service.profiles?.avatar_url} />
+                  <AvatarImage src={service.profiles?.avatar_url || undefined} />
                   <AvatarFallback className="bg-primary text-white text-sm font-bold">
                     {providerInitials}
                   </AvatarFallback>

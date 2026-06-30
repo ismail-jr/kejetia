@@ -17,12 +17,11 @@ import { Profile, ROLE_STYLES } from "./types";
 interface UserCardItemProps {
   user: Profile;
   onUpdateRole: (
-    profileId: string,
     userId: string,
     currentRole: string,
     targetRole: "student" | "provider" | "admin",
   ) => void;
-  onToggleVerified: (profileId: string, currentStatus: boolean) => void;
+  onToggleVerified: (userId: string, currentStatus: boolean) => void;
 }
 
 export function UserCardItem({
@@ -37,7 +36,7 @@ export function UserCardItem({
       .join("")
       .slice(0, 2) || "U";
 
-  const coreUserId = user.user_id || user.id;
+  const coreUserId = user.user_id;
   const activeSessionRole = user.active_role || "student";
   const userRolesList =
     user.roles && user.roles.length > 0 ? user.roles : [activeSessionRole];
@@ -107,7 +106,7 @@ export function UserCardItem({
                   "bg-blue-500/10 text-blue-600 dark:text-blue-400",
               )}
               onClick={() =>
-                onUpdateRole(user.id, coreUserId, activeSessionRole, "student")
+                onUpdateRole(coreUserId, activeSessionRole, "student")
               }
             >
               <GraduationCap className="w-3.5 h-3.5 stroke-[2]" />
@@ -123,7 +122,7 @@ export function UserCardItem({
                   "bg-amber-500/10 text-amber-600 dark:text-amber-400",
               )}
               onClick={() =>
-                onUpdateRole(user.id, coreUserId, activeSessionRole, "provider")
+                onUpdateRole(coreUserId, activeSessionRole, "provider")
               }
             >
               <Briefcase className="w-3.5 h-3.5 stroke-[2]" />
@@ -139,7 +138,7 @@ export function UserCardItem({
                   "bg-red-500/10 text-red-600 dark:text-red-400",
               )}
               onClick={() =>
-                onUpdateRole(user.id, coreUserId, activeSessionRole, "admin")
+                onUpdateRole(coreUserId, activeSessionRole, "admin")
               }
             >
               <ShieldAlert className="w-3.5 h-3.5 stroke-[2]" />
@@ -154,7 +153,7 @@ export function UserCardItem({
               "h-8 px-3 rounded-xl text-xs flex gap-1.5 font-heading font-medium",
               !isVerified && "hover:bg-primary/5 hover:text-primary",
             )}
-            onClick={() => onToggleVerified(user.id, isVerified)}
+            onClick={() => onToggleVerified(coreUserId, isVerified)}
           >
             {isVerified ? (
               <>

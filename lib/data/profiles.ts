@@ -1,9 +1,15 @@
 import { db } from "@/lib/supabase";
+import { listProviderPublicServices } from "@/lib/data/services";
+import {
+  listProviderReviewsWithDetails,
+  type ReviewWithDetails,
+} from "@/lib/data/reviews";
 import type {
   Profile,
   ProviderProfile,
   StudentProfile,
   ProviderPublicProfile,
+  Service,
 } from "@/lib/data/types";
 
 // ── Identity ────────────────────────────────────────────────────────
@@ -154,6 +160,35 @@ export async function getProviderPublicProfile(
     total_reviews: provider?.total_reviews ?? 0,
     total_bookings: provider?.total_bookings ?? 0,
   };
+}
+
+export interface ProviderPublicPageData {
+  profile: ProviderPublicProfile;
+  services: Service[];
+  reviews: ReviewWithDetails[];
+}
+
+// Bundles everything needed for the public provider profile page.
+export async function getProviderPublicPageData(
+  userId: string,
+): Promise<ProviderPublicPageData | null> {
+  const [profile, providerExt] = await Promise.all([
+    getProviderPublicProfile(userId),
+    getProviderProfile(userId),
+  ]);
+
+  if (!profile) return null;
+
+  const isProvider =
+    profile.roles.includes("provider") || providerExt !== null;
+  if (!isProvider) return null;
+
+  const [services, reviews] = await Promise.all([
+    listProviderPublicServices(userId),
+    listProviderReviewsWithDetails(userId),
+  ]);
+
+  return { profile, services, reviews };
 }
 
 // Batch fetch identity summaries for a set of user ids (providers or

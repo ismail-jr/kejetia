@@ -13,7 +13,7 @@ import type { Database } from "@/lib/database.types";
 type PricingType = "fixed" | "hourly" | "negotiable";
 
 type Service = Database["public"]["Tables"]["services"]["Row"] & {
-  profiles?: { full_name: string; avatar_url: string } | null;
+  profiles?: { full_name: string; avatar_url: string | null } | null;
   is_saved?: boolean;
   pricing_type?: PricingType;
 };

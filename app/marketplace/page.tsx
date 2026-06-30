@@ -17,20 +17,20 @@ interface Service {
   title: string;
   description: string;
   category: string;
-  price: string;
+  price: number;
   images: string[];
   tags: string[];
   status: string;
-  avg_rating: string;
+  avg_rating: number;
   total_reviews: number;
   total_bookings: number;
-  pricing_type: string;
+  pricing_type: string | null;
   created_at: string;
   updated_at: string;
   profiles?: {
     full_name: string;
-    avatar_url: string;
-    location: string;
+    avatar_url: string | null;
+    location: string | null;
   };
 }
 

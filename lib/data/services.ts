@@ -116,6 +116,21 @@ export async function getServiceWithProvider(
   return withProvider;
 }
 
+// Approved listings shown on a provider's public profile.
+export async function listProviderPublicServices(
+  providerId: string,
+): Promise<Service[]> {
+  const { data, error } = await db
+    .from("services")
+    .select("*")
+    .eq("provider_id", providerId)
+    .eq("status", "approved")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as Service[];
+}
+
 // Provider-owned listings (any status).
 export async function listProviderServices(
   providerId: string,

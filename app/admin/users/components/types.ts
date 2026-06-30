@@ -1,20 +1,18 @@
 export type Profile = {
-  id: string;
   user_id: string;
   full_name: string | null;
   email: string | null;
   student_id: string | null;
   bio: string | null;
   avatar_url: string | null;
+  phone: string | null;
+  location: string | null;
   roles: string[] | null;
   active_role: string | null;
   is_admin: boolean;
+  is_verified: boolean;
   created_at: string;
   updated_at: string;
-  momo_number: string | null;
-  momo_name: string | null;
-  momo_network: string | null;
-  is_verified?: boolean;
 };
 
 export const ROLE_STYLES: Record<string, string> = {

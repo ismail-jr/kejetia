@@ -9,7 +9,7 @@ import { isOwnService } from "@/lib/utils/booking";
 
 interface ServiceProvider {
   full_name: string;
-  avatar_url: string;
+  avatar_url: string | null;
 }
 
 type PricingType = "fixed" | "hourly" | "negotiable";

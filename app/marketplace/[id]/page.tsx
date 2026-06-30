@@ -21,26 +21,26 @@ interface Service {
   title: string;
   description: string;
   category: string;
-  price: string;
+  price: number;
   images: string[];
   tags: string[];
   status: string;
-  avg_rating: string;
+  avg_rating: number;
   total_reviews: number;
   total_bookings: number;
-  pricing_type: string;
+  pricing_type: string | null;
   created_at: string;
   updated_at: string;
   profiles?: {
     full_name: string;
-    avatar_url: string;
-    location: string;
-    phone: string;
+    avatar_url: string | null;
+    location: string | null;
+    phone: string | null;
   };
 }
 
 export default function MarketplaceDetailPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
 
@@ -117,8 +117,8 @@ export default function MarketplaceDetailPage() {
     );
   }
 
-  const getPriceDisplay = (price: string, pricingType: string) => {
-    const formattedPrice = parseFloat(price).toFixed(2);
+  const getPriceDisplay = (price: number, pricingType: string | null) => {
+    const formattedPrice = price.toFixed(2);
     return pricingType === "hourly"
       ? `GH₵${formattedPrice}/hr`
       : pricingType === "negotiable"
@@ -126,7 +126,7 @@ export default function MarketplaceDetailPage() {
         : `GH₵${formattedPrice}`;
   };
 
-  const getPricingLabel = (pricingType: string) => {
+  const getPricingLabel = (pricingType: string | null) => {
     return pricingType === "hourly"
       ? "Hourly"
       : pricingType === "negotiable"
@@ -189,7 +189,7 @@ export default function MarketplaceDetailPage() {
                 service.pricing_type,
               )}
               priceLabel={getPricingLabel(service.pricing_type)}
-              pricingType={service.pricing_type}
+              pricingType={service.pricing_type ?? "fixed"}
               tags={service.tags}
             />
           </div>
@@ -201,7 +201,7 @@ export default function MarketplaceDetailPage() {
           serviceId={service.id}
           serviceTitle={service.title}
           providerId={service.provider_id}
-          servicePrice={parseFloat(service.price)}
+          servicePrice={service.price}
           isOpen={bookingModalOpen}
           onClose={() => setBookingModalOpen(false)}
         />

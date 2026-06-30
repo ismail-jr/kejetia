@@ -30,7 +30,7 @@ interface PopularService {
   id: string;
   title: string;
   category: string;
-  price: string;
+  price: number;
   images: string[];
 }
 
@@ -139,9 +139,8 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
     return CATEGORY_ICONS[key] || BookOpen;
   };
 
-  const formatPrice = (price: string) => {
-    const num = parseFloat(price);
-    return `From GHS ${Number.isFinite(num) ? num.toFixed(0) : price}`;
+  const formatPrice = (price: number) => {
+    return `From GHS ${Number.isFinite(price) ? price.toFixed(0) : price}`;
   };
 
   return (

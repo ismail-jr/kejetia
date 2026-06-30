@@ -28,13 +28,13 @@ interface Service {
   title: string;
   description: string;
   category: string;
-  price: string;
+  price: number;
   images: string[];
   tags: string[];
   status: string;
   avg_rating: number | null;
   total_reviews: number | null;
-  pricing_type: string;
+  pricing_type: string | null;
   created_at: string;
   provider_id: string;
 }
@@ -77,16 +77,15 @@ function SkeletonCard() {
   );
 }
 
-function getPriceDisplay(price: string, pricingType: string): string {
-  const num = parseFloat(price);
-  if (isNaN(num)) return "Contact for price";
-  const formatted = `GH₵${num.toFixed(2)}`;
+function getPriceDisplay(price: number, pricingType: string | null): string {
+  if (!Number.isFinite(price)) return "Contact for price";
+  const formatted = `GH₵${price.toFixed(2)}`;
   if (pricingType === "hourly") return `${formatted}/hr`;
   if (pricingType === "negotiable") return `From ${formatted}`;
   return formatted;
 }
 
-function getPricingIcon(pricingType: string) {
+function getPricingIcon(pricingType: string | null) {
   if (pricingType === "hourly") return Clock;
   if (pricingType === "negotiable") return TrendingUp;
   return DollarSign;

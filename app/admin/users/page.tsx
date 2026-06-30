@@ -18,7 +18,6 @@ export default function AdminUsersPage() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // 1. Align active JWT metadata context parameters
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -28,7 +27,6 @@ export default function AdminUsersPage() {
         });
       }
 
-      // 2. Load profiles
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
@@ -52,13 +50,12 @@ export default function AdminUsersPage() {
   }, []);
 
   const updateRole = async (
-    profileId: string,
     userId: string,
     currentActiveRole: string,
     targetRole: "student" | "provider" | "admin",
   ) => {
     try {
-      const localUser = users.find((u) => u.id === profileId);
+      const localUser = users.find((u) => u.user_id === userId);
       if (!localUser) return;
 
       const updatedRoles = [...(localUser.roles || [])];
@@ -73,19 +70,13 @@ export default function AdminUsersPage() {
           roles: updatedRoles,
           is_admin: targetRole === "admin" ? true : localUser.is_admin,
         })
-        .eq("id", profileId);
+        .eq("user_id", userId);
 
       if (profileError) throw profileError;
 
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({ user_id: userId, role: targetRole });
-
-      if (roleError && roleError.code !== "23505") throw roleError;
-
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === profileId
+          u.user_id === userId
             ? {
                 ...u,
                 active_role: targetRole,
@@ -103,17 +94,17 @@ export default function AdminUsersPage() {
     }
   };
 
-  const toggleVerified = async (profileId: string, currentStatus: boolean) => {
+  const toggleVerified = async (userId: string, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
     const { error } = await supabase
       .from("profiles")
-      .update({ is_verified: nextStatus } as any)
-      .eq("id", profileId);
+      .update({ is_verified: nextStatus })
+      .eq("user_id", userId);
 
     if (!error) {
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === profileId ? { ...u, is_verified: nextStatus } : u,
+          u.user_id === userId ? { ...u, is_verified: nextStatus } : u,
         ),
       );
       toast.success(
@@ -124,7 +115,6 @@ export default function AdminUsersPage() {
     }
   };
 
-  // Perform search matching & segment tab filtrations
   const filteredUsers = users.filter((u) => {
     const matchesSearch =
       !search ||
@@ -171,7 +161,7 @@ export default function AdminUsersPage() {
           <div className="divide-y divide-border">
             {filteredUsers.map((user) => (
               <UserCardItem
-                key={user.id}
+                key={user.user_id}
                 user={user}
                 onUpdateRole={updateRole}
                 onToggleVerified={toggleVerified}
