@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/contexts/auth-context";
-import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
@@ -15,23 +14,16 @@ import {
   Users,
   Award,
   Clock,
-  Sparkles,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { Database } from "@/lib/database.types";
+import { listProviderReviewsWithDetails } from "@/lib/data/reviews";
+import type { ReviewWithDetails } from "@/lib/data/reviews";
 import StatCard from "@/components/dashboard/StatCard";
-
-type ReviewRow = Database["public"]["Tables"]["reviews"]["Row"];
-
-type Review = ReviewRow & {
-  reviewer?: { full_name: string | null; avatar_url: string | null } | null;
-  service?: { title: string } | null;
-};
 
 export default function ProviderReviewsPage() {
   const { user } = useAuth();
-  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviews, setReviews] = useState<ReviewWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [avgRating, setAvgRating] = useState(0);
   const [distribution, setDistribution] = useState<number[]>([0, 0, 0, 0, 0]);
@@ -40,47 +32,14 @@ export default function ProviderReviewsPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const { data: reviewsData, error: reviewsError } = await supabase
-        .from("reviews")
-        .select("*")
-        .eq("provider_id", user.id)
-        .order("created_at", { ascending: false });
+      const combined = await listProviderReviewsWithDetails(user.id);
+      setReviews(combined);
 
-      if (reviewsError) throw reviewsError;
-
-      if (!reviewsData || reviewsData.length === 0) {
-        setReviews([]);
+      if (combined.length === 0) {
         setAvgRating(0);
         setDistribution([0, 0, 0, 0, 0]);
         return;
       }
-
-      const reviewerIds = [...new Set(reviewsData.map((r) => r.reviewer_id))];
-      const serviceIds = [...new Set(reviewsData.map((r) => r.service_id))];
-
-      const [profilesResult, servicesResult] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("user_id, full_name, avatar_url")
-          .in("user_id", reviewerIds),
-        supabase.from("services").select("id, title").in("id", serviceIds),
-      ]);
-
-      if (profilesResult.error) throw profilesResult.error;
-      if (servicesResult.error) throw servicesResult.error;
-
-      const profilesMap = new Map(
-        profilesResult.data?.map((p) => [p.user_id, p]),
-      );
-      const servicesMap = new Map(servicesResult.data?.map((s) => [s.id, s]));
-
-      const combined: Review[] = reviewsData.map((r) => ({
-        ...r,
-        reviewer: profilesMap.get(r.reviewer_id) || null,
-        service: servicesMap.get(r.service_id) || null,
-      }));
-
-      setReviews(combined);
 
       const avg = combined.reduce((s, r) => s + r.rating, 0) / combined.length;
       setAvgRating(avg);
@@ -126,7 +85,6 @@ export default function ProviderReviewsPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
@@ -134,7 +92,7 @@ export default function ProviderReviewsPage() {
             </h1>
             <p className="text-muted-foreground mt-2 flex items-center gap-2">
               <Users className="w-4 h-4" />
-              See what students say about your services
+              See what students say after completed, paid bookings
             </p>
           </div>
           {hasReviews && (
@@ -145,7 +103,6 @@ export default function ProviderReviewsPage() {
           )}
         </div>
 
-        {/* Stats Cards using StatCard component */}
         {!loading && hasReviews && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <StatCard
@@ -211,11 +168,9 @@ export default function ProviderReviewsPage() {
           </div>
         )}
 
-        {/* Summary card with distribution */}
         {!loading && hasReviews && (
           <Card className="rounded-2xl border border-border/60 p-6 hover:shadow-lg transition-shadow">
             <div className="flex flex-col lg:flex-row gap-8">
-              {/* Left: Big Rating */}
               <div className="text-center lg:text-left lg:min-w-[180px]">
                 <div className="text-5xl font-bold text-foreground">
                   {avgRating.toFixed(1)}
@@ -238,7 +193,6 @@ export default function ProviderReviewsPage() {
                 </p>
               </div>
 
-              {/* Right: Distribution Bars */}
               <div className="flex-1 space-y-2.5">
                 {[5, 4, 3, 2, 1].map((star, i) => {
                   const count = distribution[i] || 0;
@@ -267,7 +221,6 @@ export default function ProviderReviewsPage() {
           </Card>
         )}
 
-        {/* Loading State */}
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
@@ -292,8 +245,8 @@ export default function ProviderReviewsPage() {
               No Reviews Yet
             </h3>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Reviews from students will appear here once they complete bookings
-              for your services.
+              Reviews appear here after students complete a booking, you mark it
+              as paid, and they leave feedback.
             </p>
             <div className="mt-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
               <Clock className="w-4 h-4" />
@@ -316,7 +269,6 @@ export default function ProviderReviewsPage() {
                   className="rounded-2xl border border-border/60 p-6 hover:shadow-lg transition-all duration-300 group"
                 >
                   <div className="flex items-start gap-4">
-                    {/* Avatar */}
                     <Avatar className="w-12 h-12 flex-shrink-0 ring-2 ring-primary/10 ring-offset-2 ring-offset-background">
                       <AvatarImage
                         src={review.reviewer?.avatar_url || undefined}
@@ -327,7 +279,6 @@ export default function ProviderReviewsPage() {
                     </Avatar>
 
                     <div className="flex-1 min-w-0">
-                      {/* Header */}
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <span className="font-semibold text-foreground text-base">
@@ -347,7 +298,6 @@ export default function ProviderReviewsPage() {
                             </div>
                           </div>
                         </div>
-                        {/* Rating Badge */}
                         <Badge
                           variant="secondary"
                           className="flex items-center gap-1"
@@ -357,7 +307,6 @@ export default function ProviderReviewsPage() {
                         </Badge>
                       </div>
 
-                      {/* Stars */}
                       <div className="flex gap-0.5 mt-3">
                         {Array.from({ length: 5 }).map((_, i) => (
                           <Star
@@ -372,7 +321,6 @@ export default function ProviderReviewsPage() {
                         ))}
                       </div>
 
-                      {/* Comment */}
                       {review.comment && (
                         <div className="mt-3 p-3 bg-muted/30 rounded-xl border border-border/30">
                           <p className="text-sm text-muted-foreground leading-relaxed">

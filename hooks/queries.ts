@@ -11,8 +11,8 @@ import {
   getProviderPublicProfile,
   getSavedServiceIds,
   toggleSavedService,
-  listClientBookings,
-  listProviderBookings,
+  listClientBookingsWithDetails,
+  listProviderBookingsWithDetails,
   listNotifications,
   type ServiceQuery,
 } from "@/lib/data";
@@ -83,7 +83,7 @@ export function useToggleSaved(studentId: string | undefined) {
 export function useClientBookings(clientId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.clientBookings(clientId ?? ""),
-    queryFn: () => listClientBookings(clientId as string),
+    queryFn: () => listClientBookingsWithDetails(clientId as string),
     enabled: !!clientId,
   });
 }
@@ -91,7 +91,7 @@ export function useClientBookings(clientId: string | undefined) {
 export function useProviderBookings(providerId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.providerBookings(providerId ?? ""),
-    queryFn: () => listProviderBookings(providerId as string),
+    queryFn: () => listProviderBookingsWithDetails(providerId as string),
     enabled: !!providerId,
   });
 }
