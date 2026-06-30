@@ -49,6 +49,22 @@ export const authService = {
     return data;
   },
 
+  // Resend a registration OTP (custom nodemailer + Redis flow). This is
+  // NOT supabase.auth.resend — registration verification is fully handled
+  // by the Express backend, so the resend must hit the same system.
+  async resendRegister(email: string): Promise<{ message: string }> {
+    const response = await fetch(`${BACKEND_URL}/api/auth/register/resend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || "Failed to resend verification code");
+    return data;
+  },
+
   // Phase 2: Verify OTP
   async verifyRegister(
     email: string,
