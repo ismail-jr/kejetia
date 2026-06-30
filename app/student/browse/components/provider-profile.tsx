@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Phone, MessageSquareMore, MapPin } from "lucide-react";
+import { Phone, MapPin } from "lucide-react";
+import { MessageUserButton } from "@/components/messaging/message-user-button";
 
 interface ProviderProfileProps {
+  providerId: string;
   fullName: string;
   avatarUrl?: string | null;
   phone?: string | null;
@@ -12,6 +14,7 @@ interface ProviderProfileProps {
 }
 
 export function ProviderProfile({
+  providerId,
   fullName,
   avatarUrl,
   phone,
@@ -33,13 +36,15 @@ export function ProviderProfile({
           <span className="text-xs text-muted-foreground block font-medium">
             Offered by UCC Peer
           </span>
-          <span className="font-bold text-base text-foreground block truncate">
+          <Link
+            href={`/providers/${providerId}`}
+            className="font-bold text-base text-foreground block truncate hover:text-primary transition-colors"
+          >
             {fullName || "UCC Student"}
-          </span>
+          </Link>
         </div>
       </div>
 
-      {/* Location */}
       {location && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-background px-3 py-2 rounded-lg border border-muted/40">
           <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
@@ -47,7 +52,6 @@ export function ProviderProfile({
         </div>
       )}
 
-      {/* Communication Actions */}
       <div className="flex items-center gap-2 pt-0.5">
         {phone ? (
           <Button
@@ -67,19 +71,14 @@ export function ProviderProfile({
           </div>
         )}
 
-        <Button
-          asChild
+        <MessageUserButton
+          targetUserId={providerId}
           variant="outline"
           size="sm"
-          className="px-3 h-9 rounded-lg border-muted bg-background hover:bg-muted transition"
-          title="Chat with Provider"
-        >
-          <Link
-            href={`/student/messages?search=${encodeURIComponent(fullName || "")}`}
-          >
-            <MessageSquareMore className="w-4 h-4 text-primary" />
-          </Link>
-        </Button>
+          label=""
+          showIcon
+          className="px-3 h-9 rounded-lg border-muted bg-background hover:bg-muted"
+        />
       </div>
     </div>
   );

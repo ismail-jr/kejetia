@@ -13,6 +13,7 @@ import {
   type ConversationListItem,
   type MessageWithSender,
 } from "@/lib/messaging-data";
+import { getPartySummaries } from "@/lib/data/profiles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -86,7 +87,20 @@ export default function MessagesPage() {
       if (!user) return;
       try {
         const convId = await getOrCreateDirectConversation(targetId);
-        await openConversation(convId, null);
+        const summaries = await getPartySummaries([targetId]);
+        const summary = summaries.get(targetId);
+        const partner: ActivePartner = summary
+          ? {
+              user_id: summary.user_id,
+              full_name: summary.full_name,
+              avatar_url: summary.avatar_url,
+            }
+          : {
+              user_id: targetId,
+              full_name: "User",
+              avatar_url: null,
+            };
+        await openConversation(convId, partner);
       } catch (err) {
         console.error("Failed to start conversation:", err);
       }

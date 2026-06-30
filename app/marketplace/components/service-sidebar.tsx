@@ -23,13 +23,13 @@ interface ServiceSidebarProps {
   onBookingClick: () => void;
   profiles?: {
     full_name: string;
-    avatar_url: string;
-    location: string;
-    phone: string;
+    avatar_url: string | null;
+    location: string | null;
+    phone: string | null;
   };
   priceDisplay: string;
   priceLabel: string;
-  pricingType: string;
+  pricingType: string | null;
   tags?: string[];
 }
 
@@ -53,7 +53,7 @@ export function ServiceSidebar({
       .slice(0, 2)
       .toUpperCase() || "U";
 
-  const getPricingIcon = (type: string) => {
+  const getPricingIcon = (type: string | null) => {
     switch (type) {
       case "hourly":
         return Clock;
@@ -129,7 +129,7 @@ export function ServiceSidebar({
       <div className="p-4 bg-card border border-border rounded-xl space-y-3">
         <div className="flex items-center gap-3">
           <Avatar className="w-12 h-12">
-            <AvatarImage src={profiles?.avatar_url} />
+            <AvatarImage src={profiles?.avatar_url || undefined} />
             <AvatarFallback className="bg-primary/10 text-primary font-bold">
               {initials}
             </AvatarFallback>

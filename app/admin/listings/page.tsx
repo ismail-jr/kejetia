@@ -88,7 +88,10 @@ export default function AdminListingsPage() {
     reason = "",
   ) => {
     setSubmittingAction(id);
-    const updatePayload: Record<string, any> = { status };
+    const updatePayload: {
+      status: "approved" | "rejected" | "archived";
+      rejection_reason?: string;
+    } = { status };
     if (status === "rejected") {
       updatePayload.rejection_reason = reason;
     }

@@ -31,7 +31,7 @@ type Service = Database["public"]["Tables"]["services"]["Row"] & {
 };
 
 export default function ServiceDetailPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useAuth();
 
@@ -264,6 +264,7 @@ export default function ServiceDetailPage() {
 
               {/* Provider Profile */}
               <ProviderProfile
+                providerId={service.provider_id}
                 fullName={service.profiles?.full_name || "UCC Student"}
                 avatarUrl={service.profiles?.avatar_url}
                 phone={service.profiles?.phone}

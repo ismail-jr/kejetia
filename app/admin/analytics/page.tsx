@@ -46,28 +46,34 @@ export default function AdminAnalyticsPage() {
   useEffect(() => {
     const fetchData = async () => {
       const [profilesRes, servicesRes, bookingsRes] = await Promise.all([
-        supabase.from("profiles").select("role"),
+        supabase.from("profiles").select("roles"),
         supabase.from("services").select("status, category"),
-        supabase.from("bookings").select("status, amount, created_at"),
+        supabase.from("bookings").select("status, total_amount, created_at"),
       ]);
 
-      const profiles: { role: string }[] = profilesRes.data || [];
+      const profiles: { roles: string[] }[] = profilesRes.data || [];
       const services: { status: string; category: string }[] =
         servicesRes.data || [];
-      const bookings: { status: string; amount: number; created_at: string }[] =
-        bookingsRes.data || [];
+      const bookings: {
+        status: string;
+        total_amount: number;
+        created_at: string;
+      }[] = bookingsRes.data || [];
       const completed = bookings.filter((b) => b.status === "completed");
 
       setStats({
         totalUsers: profiles.length,
-        students: profiles.filter((p) => p.role === "student").length,
-        providers: profiles.filter((p) => p.role === "provider").length,
+        students: profiles.filter((p) => p.roles?.includes("student")).length,
+        providers: profiles.filter((p) => p.roles?.includes("provider")).length,
         totalServices: services.length,
         approvedServices: services.filter((s) => s.status === "approved")
           .length,
         totalBookings: bookings.length,
         completedBookings: completed.length,
-        totalRevenue: completed.reduce((s, b) => s + Number(b.amount), 0),
+        totalRevenue: completed.reduce(
+          (s, b) => s + Number(b.total_amount),
+          0,
+        ),
       });
 
       const catCounts: Record<string, number> = {};
@@ -93,7 +99,8 @@ export default function AdminAnalyticsPage() {
         });
         if (months[key]) {
           months[key].bookings++;
-          if (b.status === "completed") months[key].revenue += Number(b.amount);
+          if (b.status === "completed")
+            months[key].revenue += Number(b.total_amount);
         }
       });
       setMonthlyData(

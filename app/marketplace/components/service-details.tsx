@@ -5,7 +5,7 @@ import { Star, Users, Shield } from "lucide-react";
 interface ServiceDetailsProps {
   title: string;
   description: string;
-  avgRating: string;
+  avgRating: number | string;
   totalReviews: number;
   totalBookings: number;
 }
@@ -17,7 +17,8 @@ export function ServiceDetails({
   totalReviews,
   totalBookings,
 }: ServiceDetailsProps) {
-  const rating = parseFloat(avgRating);
+  const rating =
+    typeof avgRating === "number" ? avgRating : parseFloat(avgRating);
   const hasRating = rating > 0;
 
   return (
