@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { getProviderPublicProfile, createBooking } from "@/lib/data";
 import { toast } from "sonner";
 import { BookingModalHeader } from "./modal-header";
 import { Step1CalendarSelection } from "./step1-calendar";
@@ -52,19 +53,14 @@ export default function BookingModal({
   useEffect(() => {
     if (isOpen && providerId) {
       const fetchProviderData = async () => {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select(
-            "full_name, phone, momo_number, momo_name, momo_network, available_days, available_time",
-          )
-          .eq("user_id", providerId)
-          .single();
-
-        if (error) {
+        // Identity (full_name/phone) + provider extension (momo/availability)
+        // merged into one shape by the data layer.
+        try {
+          const data = await getProviderPublicProfile(providerId);
+          setProviderProfile(data);
+        } catch (error) {
           console.error("Profile fetch error:", error);
           toast.error("Failed to fetch provider availability metadata.");
-        } else {
-          setProviderProfile(data);
         }
       };
       fetchProviderData();
@@ -90,7 +86,7 @@ export default function BookingModal({
         return;
       }
 
-      const { error } = await supabase.from("bookings").insert({
+      await createBooking({
         service_id: serviceId,
         client_id: user.id,
         provider_id: providerId,
@@ -104,8 +100,6 @@ export default function BookingModal({
         total_amount: servicePrice,
         payment_status: "unpaid",
       });
-
-      if (error) throw error;
 
       setStep(4);
       toast.success("Booking logged successfully!");

@@ -5,11 +5,13 @@ const {
   initiateRegister,
   verifyRegisterOtp,
   signIn,
+  addRole,
 } = require("../controllers/auth-controller");
 
 const { loginLimiter } = require("../middleware/rate-limit");
 const { loginEmailLock } = require("../middleware/login-email-lock");
 const { otpRateLimit } = require("../middleware/otp-rate-limit");
+const { requireAuth } = require("../middleware/require-auth");
 
 router.post("/register/initiate", otpRateLimit, initiateRegister);
 
@@ -22,5 +24,9 @@ router.post("/register/initiate", otpRateLimit, initiateRegister);
 router.post("/register/verify", otpRateLimit, verifyRegisterOtp);
 
 router.post("/signin", loginLimiter, loginEmailLock, signIn);
+
+// Add a secondary role to an already signed-in, email-verified account.
+// No OTP — authentication is proven by the bearer token (requireAuth).
+router.post("/role/add", requireAuth, addRole);
 
 module.exports = router;

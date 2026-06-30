@@ -30,31 +30,50 @@ import {
   XCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-const schema = z
-  .object({
-    full_name: z
-      .string()
-      .or(z.string().min(2, "Full name must be at least 2 characters")),
-    email: z
-      .string()
-      .email("Please enter a valid email")
-      .refine(
-        (e) => e.endsWith("@stu.ucc.edu.gh") || e.endsWith("@ucc.edu.gh"),
-        "Use your official UCC email address",
-      ),
-    student_id: z.string().or(z.string().min(4, "Student ID is required")),
-    role: z.enum(["student", "provider"]),
-    password: z.string().min(8, "Password must be at least 8 characters"),
-    confirm_password: z.string(),
-  })
-  .refine((d) => d.password === d.confirm_password, {
-    message: "Passwords do not match",
-    path: ["confirm_password"],
-  });
+// When an already signed-in user is unlocking a second role we don't
+// collect a password (the account already exists and is verified), so
+// password validation is skipped in that mode. Field types stay stable
+// (always `string`); only the validation rules differ via superRefine.
+const makeSchema = (requirePassword: boolean) =>
+  z
+    .object({
+      full_name: z
+        .string()
+        .or(z.string().min(2, "Full name must be at least 2 characters")),
+      email: z
+        .string()
+        .email("Please enter a valid email")
+        .refine(
+          (e) => e.endsWith("@stu.ucc.edu.gh") || e.endsWith("@ucc.edu.gh"),
+          "Use your official UCC email address",
+        ),
+      student_id: z.string().or(z.string().min(4, "Student ID is required")),
+      role: z.enum(["student", "provider"]),
+      password: z.string(),
+      confirm_password: z.string(),
+    })
+    .superRefine((d, ctx) => {
+      if (!requirePassword) return;
+      if (d.password.length < 8) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["password"],
+          message: "Password must be at least 8 characters",
+        });
+      }
+      if (d.password !== d.confirm_password) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["confirm_password"],
+          message: "Passwords do not match",
+        });
+      }
+    });
 
-type FormData = z.infer<typeof schema>;
+type FormData = z.infer<ReturnType<typeof makeSchema>>;
 
 // ── Password strength helpers ────────────────────────────────────────────────
 function getStrength(password: string): {
@@ -92,7 +111,8 @@ function getStrength(password: string): {
 }
 
 export function RegistrationForm() {
-  const { registerUser, isAuthLoading, user } = useAuth();
+  const { registerUser, addRole, isAuthLoading, user } = useAuth();
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -106,7 +126,7 @@ export function RegistrationForm() {
     setError,
     formState: { errors },
   } = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(makeSchema(!isAddingSecondaryRole)),
     values: {
       role: (user ? "provider" : "student") as "student" | "provider",
       email: user?.email || "",
@@ -133,13 +153,19 @@ export function RegistrationForm() {
 
   const onSubmit = async (data: FormData) => {
     try {
+      // Existing, signed-in user unlocking a second role: no new account,
+      // no OTP, no password — handled by the authenticated add-role flow.
+      if (isAddingSecondaryRole) {
+        const result = await addRole(data.role);
+        router.push(`/${result.activeRole}/dashboard`);
+        return;
+      }
+
       await registerUser({
         email: data.email,
         password: data.password,
-        fullName:
-          data.full_name || (user?.user_metadata?.full_name as string) || "",
-        studentId:
-          data.student_id || (user?.user_metadata?.student_id as string) || "",
+        fullName: data.full_name || "",
+        studentId: data.student_id || "",
         role: data.role,
       });
     } catch (error: any) {
@@ -365,7 +391,8 @@ export function RegistrationForm() {
           )}
         </div>
 
-        {/* Passwords */}
+        {/* Passwords — only needed when creating a brand-new account */}
+        {!isAddingSecondaryRole && (
         <div className="grid grid-cols-2 gap-2.5">
           {/* Password */}
           <div className="space-y-1">
@@ -471,6 +498,7 @@ export function RegistrationForm() {
             )}
           </div>
         </div>
+        )}
 
         {/* Submit */}
         <LoadingButton

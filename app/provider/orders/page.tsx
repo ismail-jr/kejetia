@@ -17,7 +17,7 @@ export default function ProviderOrdersPage() {
   const [activeTab, setActiveTab] = useState<TabType>("active");
 
   const fetchOrders = useCallback(async () => {
-    const currentProviderId = profile?.user_id || profile?.id;
+    const currentProviderId = profile?.user_id;
     if (!currentProviderId) return;
 
     setLoading(true);
@@ -100,7 +100,7 @@ export default function ProviderOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [profile?.user_id, profile?.id]);
+  }, [profile?.user_id]);
 
   useEffect(() => {
     fetchOrders();

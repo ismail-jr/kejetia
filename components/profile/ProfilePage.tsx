@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
-import { supabase } from "@/lib/supabase";
+import {
+  updateIdentity,
+  upsertProviderProfile,
+  getProviderProfile,
+} from "@/lib/data";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -16,8 +20,33 @@ interface ProfilePageProps {
 export default function ProfilePage({ forcedRole }: ProfilePageProps) {
   const { user, profile, activeRole, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
+  // Provider-only fields now live in provider_profiles, so they are
+  // fetched separately and merged into the form's initial data.
+  const [providerExt, setProviderExt] = useState<Record<string, any> | null>(
+    null,
+  );
 
   const targetRole = forcedRole || activeRole || "student";
+  const isProviderView = targetRole === "provider" || targetRole === "admin";
+
+  useEffect(() => {
+    if (!user?.id || !isProviderView) return;
+    let active = true;
+    getProviderProfile(user.id)
+      .then((ext) => {
+        if (active) setProviderExt(ext);
+      })
+      .catch((err) => console.error("Failed to load provider profile:", err));
+    return () => {
+      active = false;
+    };
+  }, [user?.id, isProviderView]);
+
+  // Merge identity + provider extension so the provider form prefills the
+  // momo/availability fields that moved out of profiles.
+  const mergedInitialData = providerExt
+    ? { ...(profile as any), ...providerExt }
+    : profile;
 
   const handleUpdateProfile = async (formPayload: any) => {
     if (!user?.id) return;
@@ -28,31 +57,27 @@ export default function ProfilePage({ forcedRole }: ProfilePageProps) {
       const resolvedAvatarUrl =
         formPayload.avatar_url || profile?.avatar_url || null;
 
-      const baseUpdate: any = {
+      // Identity fields → profiles
+      await updateIdentity(user.id, {
         full_name: formPayload.full_name,
         phone: formPayload.phone || null,
         location: formPayload.location || null,
         bio: formPayload.bio || "",
         avatar_url: resolvedAvatarUrl,
         student_id: formPayload.student_id || null,
-        updated_at: new Date().toISOString(),
-      };
+      });
 
-      if (targetRole === "provider" || targetRole === "admin") {
-        baseUpdate.momo_number = formPayload.momo_number || null;
-        baseUpdate.momo_name = formPayload.momo_name || null;
-        baseUpdate.momo_network = formPayload.momo_network || null;
-        baseUpdate.available_days = formPayload.available_days || [];
-        baseUpdate.available_time =
-          formPayload.available_time || "08:00 AM - 05:00 PM";
+      // Provider-only fields → provider_profiles
+      if (isProviderView) {
+        await upsertProviderProfile(user.id, {
+          momo_number: formPayload.momo_number || null,
+          momo_name: formPayload.momo_name || null,
+          momo_network: formPayload.momo_network || null,
+          available_days: formPayload.available_days || [],
+          available_time:
+            formPayload.available_time || "08:00 AM - 05:00 PM",
+        });
       }
-
-      const { error } = await supabase
-        .from("profiles")
-        .update(baseUpdate)
-        .eq("user_id", user.id);
-
-      if (error) throw error;
 
       await refreshProfile();
       toast.success("Profile information updated successfully!");
@@ -131,9 +156,9 @@ export default function ProfilePage({ forcedRole }: ProfilePageProps) {
         </div>
       </div>
 
-      {targetRole === "provider" || targetRole === "admin" ? (
+      {isProviderView ? (
         <ProviderProfile
-          initialData={profile}
+          initialData={mergedInitialData}
           onSave={handleUpdateProfile}
           loading={loading}
         />
