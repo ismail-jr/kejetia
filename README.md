@@ -235,6 +235,4 @@ between them from the dashboard.
 - **Database/Cache** — Supabase project + a Redis instance (Upstash recommended) reachable from
   wherever the backend is hosted.
 
-## License
 
-MIT
