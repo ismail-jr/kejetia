@@ -123,7 +123,7 @@ export function StepsSection({ onGetStarted }: StepsSectionProps) {
             variants={headerItemVariants}
             className="text-3xl lg:text-4xl font-heading mb-4 tracking-tight"
           >
-            How UCC Connect Works
+            How Kejetia Works
           </motion.h2>
           <motion.p
             variants={headerItemVariants}

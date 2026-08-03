@@ -51,7 +51,7 @@ export function CTASection({ onGetStarted }: CTASectionProps) {
           variants={itemVariants}
           className="text-muted-foreground mb-8 max-w-xl mx-auto font-body"
         >
-          Join hundreds of UCC students already using UCC Connect to learn,
+          Join hundreds of UCC students already using Kejetia to learn,
           earn, and grow together.
         </motion.p>
         <motion.div variants={itemVariants}>
