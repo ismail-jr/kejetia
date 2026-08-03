@@ -24,7 +24,15 @@ router.post("/register/verify", otpVerifyLimit, verifyRegisterOtp);
 router.post("/signin", loginLimiter, loginEmailLock, signIn);
 
 // Unlock a second role using existing email + password (no session required).
-router.post("/role/add-with-credentials", loginLimiter, addRoleWithCredentials);
+// Uses the same per-email lockout as /signin — this endpoint is just as
+// much a password-guessing target and previously only had the coarser
+// per-IP limiter.
+router.post(
+  "/role/add-with-credentials",
+  loginLimiter,
+  loginEmailLock,
+  addRoleWithCredentials,
+);
 
 // Add a secondary role to an already signed-in, email-verified account.
 // No OTP — authentication is proven by the bearer token (requireAuth).

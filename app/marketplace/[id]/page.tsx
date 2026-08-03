@@ -140,7 +140,7 @@ export default function MarketplaceDetailPage() {
     if (authLoading) return;
     if (!user) {
       router.push(
-        `/login?redirect=${encodeURIComponent(`/marketplace/${service.id}`)}`,
+        `/login?next=${encodeURIComponent(`/marketplace/${service.id}`)}`,
       );
       return;
     }

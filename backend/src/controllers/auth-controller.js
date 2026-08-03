@@ -53,9 +53,9 @@ const LOGIN_LOCK = (email) => `login_lock:${email}`;
 const normalizeEmail = (email = "") => email.toLowerCase().trim();
 
 // Extracts a concise, useful description from an error (Supabase/Postgres
-// errors carry message/code/details/hint). Surfaced in 500 responses so
-// failures like "relation public.student_profiles does not exist" (schema
-// not migrated) are visible to the client instead of a generic message.
+// errors carry message/code/details/hint). Logged server-side only — never
+// sent to the client, which would leak internal schema/implementation
+// details (table names, constraint names, etc.) to an attacker.
 const errorDetails = (err) => {
   if (!err) return undefined;
   const parts = [err.message, err.details, err.hint].filter(Boolean);
@@ -65,6 +65,22 @@ const errorDetails = (err) => {
 
 const safeRoles = (roles) =>
   Array.isArray(roles) ? roles.filter(Boolean) : [];
+
+// Redis here is only used for auxiliary bookkeeping (login lockout
+// counters) around signin/add-role-with-credentials — it must never be a
+// hard dependency for core authentication. If Redis is unreachable
+// (outage, DNS failure, etc.) this fails OPEN: the operation is skipped
+// and the caller proceeds as if the counter/lock simply doesn't exist,
+// instead of the whole request blowing up with a 500. Mirrors the same
+// fail-open policy already used by the loginEmailLock middleware.
+const redisOrFallback = async (op, fallback = null) => {
+  try {
+    return await op();
+  } catch (err) {
+    console.error("Redis op failed, continuing without it:", err.message);
+    return fallback;
+  }
+};
 
 const generateOtp = () => crypto.randomInt(100000, 999999).toString();
 
@@ -313,10 +329,9 @@ const initiateRegister = async (req, res) => {
 
     return res.json({ message: "Verification code sent" });
   } catch (err) {
-    console.error("initiateRegister error:", err);
+    console.error("initiateRegister error:", errorDetails(err));
     return res.status(500).json({
-      error: "Registration failed to start",
-      details: errorDetails(err),
+      error: "Registration failed to start. Please try again.",
     });
   }
 };
@@ -371,10 +386,10 @@ const resendOtp = async (req, res) => {
 
     return res.json({ message: "Verification code resent" });
   } catch (err) {
-    console.error("resendOtp error:", err);
+    console.error("resendOtp error:", errorDetails(err));
     return res
       .status(500)
-      .json({ error: "Failed to resend code", details: errorDetails(err) });
+      .json({ error: "Failed to resend code. Please try again." });
   }
 };
 
@@ -464,10 +479,10 @@ const verifyRegisterOtp = async (req, res) => {
       user: { id: userId, email, roles, activeRole, isAdmin },
     });
   } catch (err) {
-    console.error("verifyRegisterOtp error:", err);
+    console.error("verifyRegisterOtp error:", errorDetails(err));
     return res
       .status(500)
-      .json({ error: "Verification failed", details: errorDetails(err) });
+      .json({ error: "Verification failed. Please try again." });
   }
 };
 
@@ -486,7 +501,8 @@ const signIn = async (req, res) => {
     const client = getClient();
     const failKey = LOGIN_FAIL(email);
 
-    if (await client.get(LOGIN_LOCK(email))) {
+    const locked = await redisOrFallback(() => client.get(LOGIN_LOCK(email)));
+    if (locked) {
       return res.status(429).json({
         error: "Account temporarily locked. Please try again later.",
       });
@@ -498,21 +514,25 @@ const signIn = async (req, res) => {
     });
 
     if (error) {
-      const attempts = await client.incr(failKey);
-      await client.expire(failKey, LOGIN_LOCK_SECONDS);
-
-      if (attempts >= LOGIN_MAX_ATTEMPTS) {
-        await client.set(LOGIN_LOCK(email), "1", { EX: LOGIN_LOCK_SECONDS });
-      }
+      const attempts = await redisOrFallback(async () => {
+        const n = await client.incr(failKey);
+        await client.expire(failKey, LOGIN_LOCK_SECONDS);
+        if (n >= LOGIN_MAX_ATTEMPTS) {
+          await client.set(LOGIN_LOCK(email), "1", { EX: LOGIN_LOCK_SECONDS });
+        }
+        return n;
+      });
 
       return res.status(401).json({
         error: "Invalid email or password",
-        attemptsRemaining: Math.max(0, LOGIN_MAX_ATTEMPTS - attempts),
+        ...(attempts != null && {
+          attemptsRemaining: Math.max(0, LOGIN_MAX_ATTEMPTS - attempts),
+        }),
       });
     }
 
-    await client.del(failKey);
-    await client.del(LOGIN_LOCK(email));
+    await redisOrFallback(() => client.del(failKey));
+    await redisOrFallback(() => client.del(LOGIN_LOCK(email)));
 
     await ensureProfile(data.user);
 
@@ -535,10 +555,10 @@ const signIn = async (req, res) => {
       user: { id: data.user.id, email, roles, activeRole, isAdmin },
     });
   } catch (err) {
-    console.error("signIn error:", err);
+    console.error("signIn error:", errorDetails(err));
     return res
       .status(500)
-      .json({ error: "Sign in failed", details: errorDetails(err) });
+      .json({ error: "Sign in failed. Please try again." });
   }
 };
 
@@ -582,10 +602,10 @@ const addRole = async (req, res) => {
       user: { id: user.id, email: user.email, roles, activeRole, isAdmin },
     });
   } catch (err) {
-    console.error("addRole error:", err);
+    console.error("addRole error:", errorDetails(err));
     return res
       .status(500)
-      .json({ error: "Failed to add role", details: errorDetails(err) });
+      .json({ error: "Failed to add role. Please try again." });
   }
 };
 
@@ -628,9 +648,29 @@ const addRoleWithCredentials = async (req, res) => {
     });
 
     if (error) {
+      // Same per-email lockout bookkeeping as /signin — this endpoint is
+      // an equally valid password-guessing target. Fails open if Redis is
+      // unreachable so a cache outage doesn't turn every wrong-password
+      // attempt into a 500.
+      if (req.loginFailKey) {
+        const client = getClient();
+        await redisOrFallback(async () => {
+          const attempts = await client.incr(req.loginFailKey);
+          await client.expire(req.loginFailKey, LOGIN_LOCK_SECONDS);
+          if (attempts >= LOGIN_MAX_ATTEMPTS) {
+            await client.set(LOGIN_LOCK(email), "1", { EX: LOGIN_LOCK_SECONDS });
+          }
+        });
+      }
       return res.status(401).json({
         error: "Invalid email or password",
       });
+    }
+
+    if (req.loginFailKey) {
+      const client = getClient();
+      await redisOrFallback(() => client.del(req.loginFailKey));
+      await redisOrFallback(() => client.del(LOGIN_LOCK(email)));
     }
 
     const { data: profile } = await supabaseAdmin
@@ -664,10 +704,9 @@ const addRoleWithCredentials = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("addRoleWithCredentials error:", err);
+    console.error("addRoleWithCredentials error:", errorDetails(err));
     return res.status(500).json({
-      error: "Failed to add role",
-      details: errorDetails(err),
+      error: "Failed to add role. Please try again.",
     });
   }
 };
