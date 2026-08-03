@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Merriweather, Plus_Jakarta_Sans } from "next/font/google";
+import { LOGO_SRC } from "@/components/brand/logo";
 import { AuthProvider } from "@/contexts/auth-context";
 import { QueryProvider } from "@/contexts/query-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -23,6 +24,11 @@ export const metadata: Metadata = {
   title: "Kejetia | Peer-Peer Marketplace-UCC",
   description:
     "Verified peer-to-peer service exchange platform exclusively for University of Cape Coast students.",
+  icons: {
+    icon: [{ url: LOGO_SRC, type: "image/png" }],
+    shortcut: [{ url: LOGO_SRC, type: "image/png" }],
+    apple: [{ url: LOGO_SRC, type: "image/png" }],
+  },
 };
 
 export default function RootLayout({

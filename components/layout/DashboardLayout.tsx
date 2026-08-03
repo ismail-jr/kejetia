@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth, type UserRole } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +39,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
-import Image from "next/image";
+import { Logo } from "@/components/brand/logo";
 import { toast } from "sonner";
 
 interface NavItem {
@@ -98,14 +98,6 @@ export default function DashboardLayout({
     );
   }
 
-  const initials =
-    profile?.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "U";
-
   const handleSignOut = async () => {
     setIsLoggingOut(true);
     try {
@@ -143,13 +135,7 @@ export default function DashboardLayout({
       <div className="px-6 py-6 border-b border-border/40">
         <Link href="/" className="flex items-center gap-3 group">
           <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-primary/10 flex items-center justify-center ring-1 ring-primary/20 group-hover:ring-primary/40 transition-all">
-            <Image
-              src="/images/logo.png"
-              alt="Kejetia"
-              width={30}
-              height={30}
-              className="object-contain"
-            />
+            <Logo alt="Kejetia" size={30} />
           </div>
           <div>
             <p className="text-base font-black tracking-tight text-foreground leading-none font-heading">
@@ -214,22 +200,17 @@ export default function DashboardLayout({
           <DropdownMenuTrigger asChild>
             <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted/80 active:bg-muted transition-all duration-200 group text-left outline-none focus-visible:ring-2 focus-visible:ring-primary">
               <div className="relative flex-shrink-0">
-                <Avatar
+                <UserAvatar
+                  name={profile?.full_name}
+                  avatarUrl={profile?.avatar_url}
                   className={cn(
                     "w-10 h-10 transition-transform duration-200 group-hover:scale-105",
                     activeRole === "provider" && "ring-2 ring-amber-500/30",
                     activeRole === "admin" && "ring-2 ring-red-500/30",
                     activeRole === "student" && "ring-2 ring-primary/30",
                   )}
-                >
-                  <AvatarImage
-                    src={profile?.avatar_url ?? ""}
-                    alt={profile?.full_name ?? "User"}
-                  />
-                  <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
+                  fallbackClassName="bg-primary/10 text-primary text-sm font-bold"
+                />
                 <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-card" />
               </div>
 

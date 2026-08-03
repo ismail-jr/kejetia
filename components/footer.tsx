@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Mail, Phone, MapPin, ChevronRight, ArrowUp } from "lucide-react";
-import Image from "next/image";
+import { Logo } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -151,14 +151,10 @@ export function Footer() {
                 href="/"
                 className="inline-flex items-center gap-3 mb-4 group"
               >
-                <div className="relative w-10 h-10 flex-shrink-0">
-                  <Image
-                    src="/images/logo.png"
-                    alt="Kejetia Logo"
-                    fill
-                    className="object-contain rounded-xl bg-white p-1.5 group-hover:scale-105 transition-transform"
-                  />
-                </div>
+                <Logo
+                  wrapperClassName="w-10 h-10 flex-shrink-0"
+                  className="rounded-xl bg-white p-1.5 group-hover:scale-105 transition-transform"
+                />
                 <div>
                   <span className="font-bold text-xl tracking-tight text-foreground block leading-none">
                     Kejetia

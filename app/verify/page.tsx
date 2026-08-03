@@ -7,7 +7,8 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Mail, ArrowRight, RefreshCw, Sparkles } from "lucide-react";
-import Image from "next/image";
+import { Logo } from "@/components/brand/logo";
+import { Spinner } from "@/components/shared/spinner";
 import { useAuth } from "@/contexts/auth-context";
 
 // 1. Move your main component layout and hook logic here
@@ -120,7 +121,7 @@ function VerifyPageContent() {
   if (isVerified) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+        <Spinner className="w-12 h-12 border-4 mb-4" />
         <p className="text-muted-foreground text-sm font-medium animate-pulse">
           Finalizing registration... Preparing login system
         </p>
@@ -133,14 +134,10 @@ function VerifyPageContent() {
       <div className="w-full max-w-md space-y-8 bg-card border border-border/40 p-8 rounded-2xl shadow-xl">
         <div className="flex flex-col items-center text-center space-y-4">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md">
-              <Image
-                src="/images/logo.png"
-                alt="Logo"
-                fill
-                className="object-contain rounded-xl bg-white backdrop-blur-sm p-1.5 group-hover:scale-105 transition-transform"
-              />
-            </div>
+            <Logo
+              wrapperClassName="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md"
+              className="rounded-xl bg-white backdrop-blur-sm p-1.5 group-hover:scale-105 transition-transform"
+            />
             <div className="text-left">
               <span className="font-bold text-lg tracking-tight text-foreground block leading-none mb-1">
                 Kejetia
@@ -254,7 +251,7 @@ export default function VerifyPage() {
     <Suspense
       fallback={
         <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+          <Spinner className="w-12 h-12 border-4 mb-4" />
           <p className="text-muted-foreground text-sm font-medium">
             Loading verification systems...
           </p>

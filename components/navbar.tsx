@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import { Logo } from "@/components/brand/logo";
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -104,16 +104,11 @@ export function Navbar() {
               className="flex items-center gap-2 sm:gap-3 group flex-shrink-0"
               onClick={() => setIsMobileMenuOpen(false)}
             >
-              <div className="relative w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center transition-transform duration-300 group-hover:scale-105">
-                <Image
-                  src="/images/logo.png"
-                  alt="Kejetia Marketplace Logo"
-                  width={100}
-                  height={100}
-                  className="object-contain w-full h-full"
-                  priority
-                />
-              </div>
+              <Logo
+                alt="Kejetia Marketplace Logo"
+                priority
+                wrapperClassName="w-10 h-10 sm:w-11 sm:h-11 transition-transform duration-300 group-hover:scale-105"
+              />
               <span className="font-heading text-lg sm:text-xl font-bold tracking-tight text-primary transition-all duration-300 group-hover:underline underline-offset-4">
                 Kejetia
               </span>

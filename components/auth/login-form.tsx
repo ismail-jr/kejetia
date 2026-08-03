@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import { Logo } from "@/components/brand/logo";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/auth-context";
 
 const schema = z.object({
   email: z.string().email("Please enter a valid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -111,15 +111,11 @@ export function LoginForm() {
       {/* Mobile Header Logo */}
       <div className="w-full lg:hidden mb-4">
         <Link href="/" className="inline-flex items-center gap-2.5 group">
-          <div className="relative w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-            <Image
-              src="/images/logo.png"
-              alt="Kejetia Logo"
-              fill
-              sizes="32px"
-              className="object-contain rounded-lg bg-white p-1 group-hover:scale-105 transition-transform"
-            />
-          </div>
+          <Logo
+            size={32}
+            wrapperClassName="rounded-lg bg-primary flex items-center justify-center shadow-sm"
+            className="rounded-lg bg-white p-1 group-hover:scale-105 transition-transform"
+          />
           <div className="text-left">
             <span className="font-bold text-sm tracking-tight text-foreground block leading-none mb-0.5">
               Kejetia

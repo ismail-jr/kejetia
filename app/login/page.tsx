@@ -1,5 +1,6 @@
 import Link from "next/link";
-import Image from "next/image";
+import { Logo } from "@/components/brand/logo";
+import { Spinner } from "@/components/shared/spinner";
 import {
   Shield,
   Users,
@@ -51,15 +52,10 @@ export default function LoginPage() {
         <div className="flex flex-col gap-8 xl:gap-10 relative z-10 w-full max-w-md xl:max-w-xl mx-auto">
           {/* LOGO FOR DESKTOP SCREENS */}
           <Link href="/" className="flex items-center gap-3 group self-start">
-            <div className="relative w-12 h-12">
-              <Image
-                src="/images/logo.png"
-                alt="Kejetia Logo"
-                fill
-                sizes="(max-w-768px) 100vw, 33vw"
-                className="object-contain rounded-xl bg-white backdrop-blur-sm p-2 group-hover:scale-105 transition-transform"
-              />
-            </div>
+            <Logo
+              size={48}
+              className="rounded-xl bg-white backdrop-blur-sm p-2 group-hover:scale-105 transition-transform"
+            />
             <div>
               <span className="font-bold text-xl tracking-tight">Kejetia</span>
             </div>
@@ -126,7 +122,7 @@ export default function LoginPage() {
       <div className="flex items-center justify-center p-6 lg:p-12 overflow-y-auto h-full">
         <Suspense
           fallback={
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <Spinner />
           }
         >
           <LoginForm />

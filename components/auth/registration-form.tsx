@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
+import { Logo } from "@/components/brand/logo";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -269,15 +269,11 @@ export function RegistrationForm() {
       {/* Mobile logo */}
       <div className="w-full max-w-md lg:hidden mb-4 self-start">
         <Link href="/" className="inline-flex items-center gap-2.5 group">
-          <div className="relative w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-            <Image
-              src="/images/logo.png"
-              alt="Kejetia Logo"
-              fill
-              sizes="32px"
-              className="object-contain rounded-lg bg-white p-1 group-hover:scale-105 transition-transform"
-            />
-          </div>
+          <Logo
+            size={32}
+            wrapperClassName="rounded-lg bg-primary flex items-center justify-center shadow-sm"
+            className="rounded-lg bg-white p-1 group-hover:scale-105 transition-transform"
+          />
           <div className="text-left">
             <span className="font-bold text-sm tracking-tight text-foreground block leading-none mb-0.5">
               Kejetia

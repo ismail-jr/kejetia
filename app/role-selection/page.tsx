@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { User, Store } from "lucide-react";
-import Image from "next/image";
+import { Logo } from "@/components/brand/logo";
 
 export default function RoleSelectionPage() {
   const { roles, setActiveRole, user, loading } = useAuth();
@@ -37,15 +37,7 @@ export default function RoleSelectionPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-xl text-center space-y-3 mb-8">
         <div className="flex justify-center mb-4">
-          <div className="relative w-12 h-12">
-            <Image
-              src="/images/logo.png"
-              alt="Logo"
-              fill
-              sizes="(max-w-768px) 100vw, 33vw"
-              className="object-contain"
-            />
-          </div>
+          <Logo size={48} />
         </div>
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
           Choose your workspace
