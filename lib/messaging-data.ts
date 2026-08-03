@@ -67,57 +67,23 @@ export async function getOrCreateDirectConversation(
 
 /**
  * Finds or creates the single conversation tied to a specific booking.
- * Relies on conversations.booking_id being UNIQUE — if a conversation
- * already exists for this booking, returns it; otherwise creates one
- * and seeds both participants in a single pass.
+ * Delegates to the get_or_create_booking_conversation Postgres function,
+ * which verifies the caller is actually a party to the booking and seeds
+ * both participants atomically as its SECURITY DEFINER owner — client-side
+ * inserts into conversation_participants are restricted to "insert myself
+ * only" by RLS, so this can't be done as plain table writes. See
+ * 20260803120000_security_hardening.sql for the function definition.
  */
 export async function getOrCreateBookingConversation(
   bookingId: string,
-  participantIds: [string, string],
 ): Promise<string> {
-  const { data: existing, error: existingError } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("booking_id", bookingId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc(
+    "get_or_create_booking_conversation",
+    { p_booking_id: bookingId },
+  );
 
-  if (existingError) throw existingError;
-  if (existing) return existing.id;
-
-  const { data: newConvo, error: createError } = await supabase
-    .from("conversations")
-    .insert({ type: "booking", booking_id: bookingId })
-    .select("id")
-    .single();
-
-  if (createError) {
-    // Unique violation on booking_id means another request created it
-    // first (race between two inserts) — fetch and return that one
-    // instead of failing the caller.
-    if ((createError as any).code === "23505") {
-      const { data: raceWinner, error: raceError } = await supabase
-        .from("conversations")
-        .select("id")
-        .eq("booking_id", bookingId)
-        .single();
-      if (raceError) throw raceError;
-      return raceWinner.id;
-    }
-    throw createError;
-  }
-
-  const { error: participantsError } = await supabase
-    .from("conversation_participants")
-    .insert(
-      participantIds.map((userId) => ({
-        conversation_id: newConvo.id,
-        user_id: userId,
-      })),
-    );
-
-  if (participantsError) throw participantsError;
-
-  return newConvo.id;
+  if (error) throw error;
+  return data as string;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -129,126 +95,60 @@ export async function getOrCreateBookingConversation(
  * each with the other participant's profile, a preview of the last
  * message, and an unread count.
  *
- * Built as several plain queries + Map merges rather than one
- * embedded-join select — this project has repeatedly hit PGRST200
- * ("could not find relationship") on embedded joins where FK
- * introspection doesn't resolve cleanly, so that style is avoided
- * everywhere in this codebase, not just here.
+ * A single round trip to the get_conversation_previews() RPC, which
+ * computes the last message and unread count per conversation with
+ * per-row LATERAL joins server-side (see
+ * 20260803120100_conversation_previews_rpc.sql) — the previous
+ * implementation fetched every message across every one of the user's
+ * conversations on every render just to derive these two things.
  */
 export async function listConversations(): Promise<ConversationListItem[]> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  const { data, error } = await supabase.rpc("get_conversation_previews");
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
 
-  // Step 1: every conversation_participants row for the current user,
-  // including their own last_read_at for unread-count math below.
-  const { data: myParticipantRows, error: participantError } = await supabase
-    .from("conversation_participants")
-    .select("conversation_id, last_read_at")
-    .eq("user_id", user.id);
+  const rows = data as Array<{
+    id: string;
+    type: "direct" | "booking";
+    booking_id: string | null;
+    last_message_at: string;
+    other_user_id: string | null;
+    other_full_name: string | null;
+    other_avatar_url: string | null;
+    last_message_content: string | null;
+    last_message_attachments: string[] | null;
+    last_message_created_at: string | null;
+    last_message_sender_id: string | null;
+    unread_count: number;
+  }>;
 
-  if (participantError) throw participantError;
-  if (!myParticipantRows || myParticipantRows.length === 0) return [];
-
-  const conversationIds = myParticipantRows.map((r) => r.conversation_id);
-  const lastReadByConvo = new Map(
-    myParticipantRows.map((r) => [r.conversation_id, r.last_read_at]),
+  const signedByPath = await signAttachments(
+    rows.map((r) => ({ attachments: r.last_message_attachments || [] })),
   );
 
-  // Step 2: the conversation rows themselves, sorted by activity.
-  const { data: conversations, error: convoError } = await supabase
-    .from("conversations")
-    .select("id, type, booking_id, last_message_at")
-    .in("id", conversationIds)
-    .order("last_message_at", { ascending: false });
-
-  if (convoError) throw convoError;
-  if (!conversations || conversations.length === 0) return [];
-
-  // Step 3: the OTHER participant in each conversation (not me).
-  const { data: allParticipants, error: allParticipantsError } = await supabase
-    .from("conversation_participants")
-    .select("conversation_id, user_id")
-    .in("conversation_id", conversationIds);
-
-  if (allParticipantsError) throw allParticipantsError;
-
-  const otherUserIdByConvo = new Map<string, string>();
-  (allParticipants || []).forEach((p) => {
-    if (p.user_id !== user.id) {
-      otherUserIdByConvo.set(p.conversation_id, p.user_id);
-    }
-  });
-
-  const otherUserIds = [...new Set(otherUserIdByConvo.values())];
-
-  // Step 4: profiles for those other participants, in one batch.
-  const { data: profiles, error: profilesError } =
-    otherUserIds.length > 0
-      ? await supabase
-          .from("profiles")
-          .select("user_id, full_name, avatar_url")
-          .in("user_id", otherUserIds)
-      : { data: [], error: null };
-
-  if (profilesError) throw profilesError;
-
-  const profileByUserId = new Map((profiles || []).map((p) => [p.user_id, p]));
-
-  // Step 5: last message per conversation. Fetched as "all messages
-  // in these conversations, ordered, then take the first per
-  // conversation_id client-side" rather than N separate
-  // "last message for conversation X" queries.
-  const { data: recentMessages, error: messagesError } = await supabase
-    .from("messages")
-    .select("conversation_id, content, attachments, created_at, sender_id")
-    .in("conversation_id", conversationIds)
-    .order("created_at", { ascending: false });
-
-  if (messagesError) throw messagesError;
-
-  const lastMessageByConvo = new Map<
-    string,
-    {
-      content: string | null;
-      attachments: string[];
-      created_at: string;
-      sender_id: string;
-    }
-  >();
-  (recentMessages || []).forEach((m) => {
-    if (!lastMessageByConvo.has(m.conversation_id)) {
-      lastMessageByConvo.set(m.conversation_id, m);
-    }
-  });
-
-  // Step 6: unread counts. A message counts as unread if it was sent
-  // after this user's last_read_at for that conversation (or if
-  // last_read_at is null, meaning they've never read it at all) AND
-  // it wasn't sent by the user themselves.
-  const unreadCountByConvo = new Map<string, number>();
-  (recentMessages || []).forEach((m) => {
-    if (m.sender_id === user.id) return;
-    const lastRead = lastReadByConvo.get(m.conversation_id);
-    const isUnread = !lastRead || new Date(m.created_at) > new Date(lastRead);
-    if (isUnread) {
-      unreadCountByConvo.set(
-        m.conversation_id,
-        (unreadCountByConvo.get(m.conversation_id) || 0) + 1,
-      );
-    }
-  });
-
-  return conversations.map((c) => ({
-    id: c.id,
-    type: c.type,
-    booking_id: c.booking_id,
-    last_message_at: c.last_message_at,
-    otherParticipant:
-      profileByUserId.get(otherUserIdByConvo.get(c.id) || "") || null,
-    lastMessage: lastMessageByConvo.get(c.id) || null,
-    unreadCount: unreadCountByConvo.get(c.id) || 0,
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    booking_id: r.booking_id,
+    last_message_at: r.last_message_at,
+    otherParticipant: r.other_user_id
+      ? {
+          user_id: r.other_user_id,
+          full_name: r.other_full_name || "Unknown",
+          avatar_url: r.other_avatar_url,
+        }
+      : null,
+    lastMessage: r.last_message_created_at
+      ? {
+          content: r.last_message_content,
+          attachments: (r.last_message_attachments || []).map(
+            (p) => signedByPath.get(p) || p,
+          ),
+          created_at: r.last_message_created_at,
+          sender_id: r.last_message_sender_id as string,
+        }
+      : null,
+    unreadCount: Number(r.unread_count) || 0,
   }));
 }
 
@@ -307,9 +207,11 @@ export async function getMessages(
   if (sendersError) throw sendersError;
 
   const senderByUserId = new Map((senders || []).map((s) => [s.user_id, s]));
+  const signedByPath = await signAttachments(visibleMessages);
 
   return visibleMessages.map((m) => ({
     ...m,
+    attachments: m.attachments.map((p) => signedByPath.get(p) || p),
     sender: senderByUserId.get(m.sender_id) || null,
   }));
 }
@@ -379,9 +281,11 @@ export async function sendMessage(
     .eq("user_id", user.id)
     .maybeSingle();
 
+  const signedByPath = await signAttachments([{ attachments: attachmentUrls }]);
+
   return {
     ...inserted,
-    attachments: attachmentUrls,
+    attachments: attachmentUrls.map((p) => signedByPath.get(p) || p),
     sender: senderProfile || null,
   };
 }
@@ -399,17 +303,37 @@ async function uploadAttachment(
 
   if (uploadError) throw uploadError;
 
-  // Bucket is private, so a signed URL is required for display rather
-  // than a public URL. 7 days chosen as a reasonable window — long
-  // enough that a cached/rendered chat thread keeps working without
-  // needing to re-sign on every load, but not indefinite.
-  const { data: signed, error: signError } = await supabase.storage
-    .from(ATTACHMENT_BUCKET)
-    .createSignedUrl(path, 60 * 60 * 24 * 7);
+  // Store the storage PATH, not a signed URL — signed URLs expire (see
+  // signAttachments below, which re-signs on every read) so a persisted
+  // URL would silently break playback/downloads once it lapses.
+  return path;
+}
 
-  if (signError) throw signError;
+const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 hour, re-signed on every read
 
-  return signed.signedUrl;
+async function signAttachments(
+  messages: { attachments: string[] }[],
+): Promise<Map<string, string>> {
+  const allPaths = [...new Set(messages.flatMap((m) => m.attachments))];
+  if (allPaths.length === 0) return new Map();
+
+  const signedByPath = new Map<string, string>();
+  await Promise.all(
+    allPaths.map(async (path) => {
+      // Already-signed absolute URLs from legacy rows — pass through as-is.
+      if (/^https?:\/\//i.test(path)) {
+        signedByPath.set(path, path);
+        return;
+      }
+      const { data, error } = await supabase.storage
+        .from(ATTACHMENT_BUCKET)
+        .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+      if (!error && data) {
+        signedByPath.set(path, data.signedUrl);
+      }
+    }),
+  );
+  return signedByPath;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -465,7 +389,11 @@ export async function searchMessageableUsers(
 
   const trimmed = query.trim();
   if (trimmed) {
-    q = q.or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`);
+    // Escape PostgREST/LIKE special characters so user input can't alter
+    // the filter structure (comma breaks the .or() list; %/_ are LIKE
+    // wildcards that would let "%" match everyone).
+    const escaped = trimmed.replace(/[,%_\\]/g, "\\$&");
+    q = q.or(`full_name.ilike.%${escaped}%,email.ilike.%${escaped}%`);
   }
 
   const { data, error } = await q;

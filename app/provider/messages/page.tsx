@@ -1,12 +1,9 @@
 import { Suspense } from "react";
 import MessagesPage from "@/components/chat/MessagesPage";
+import { PageSpinner } from "@/components/shared/spinner";
 
 function MessagesFallback() {
-  return (
-    <div className="h-full min-h-[calc(100vh-8rem)] flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-[#00a884] border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  return <PageSpinner containerClassName="h-full min-h-[calc(100vh-8rem)]" />;
 }
 
 export default function ProviderMessagesPage() {
