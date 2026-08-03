@@ -131,6 +131,13 @@ export async function upsertStudentProfile(
 // (profiles) with the provider extension (provider_profiles). Returns
 // null if the user has no identity row. Provider-only fields fall back to
 // sensible defaults when the user is not (yet) a provider.
+//
+// IMPORTANT: this includes the provider's full momo_number and is only
+// safe to call from an authenticated context that has a legitimate reason
+// to see full payment details (e.g. the booking flow, once a client is
+// actually paying this provider). For anonymous/public profile pages use
+// getProviderPublicPreview() below instead, which never fetches or
+// returns momo_number, email, or student_id.
 export async function getProviderPublicProfile(
   userId: string,
 ): Promise<ProviderPublicProfile | null> {
@@ -162,25 +169,79 @@ export async function getProviderPublicProfile(
   };
 }
 
+// Public/anonymous-safe variant for the marketplace provider profile page.
+// Explicitly selects only non-sensitive columns instead of `select("*")`
+// so email, student_id, and the full momo_number are never fetched into a
+// page that unauthenticated visitors can load.
+export async function getProviderPublicPreview(
+  userId: string,
+): Promise<ProviderPublicProfile | null> {
+  const [{ data: profile, error: profileError }, { data: provider, error: providerError }] =
+    await Promise.all([
+      db
+        .from("profiles")
+        .select("user_id, full_name, avatar_url, bio, location, phone, is_verified, roles")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      db
+        .from("provider_profiles")
+        .select(
+          "user_id, headline, momo_name, momo_network, available_days, available_time, avg_rating, total_reviews, total_bookings",
+        )
+        .eq("user_id", userId)
+        .maybeSingle(),
+    ]);
+
+  if (profileError) throw profileError;
+  if (providerError) throw providerError;
+  if (!profile) return null;
+
+  return {
+    user_id: profile.user_id,
+    full_name: profile.full_name,
+    avatar_url: profile.avatar_url,
+    bio: profile.bio,
+    location: profile.location,
+    phone: profile.phone,
+    is_verified: profile.is_verified,
+    roles: profile.roles ?? [],
+    headline: provider?.headline ?? null,
+    momo_name: provider?.momo_name ?? null,
+    momo_network: provider?.momo_network ?? null,
+    // Full number is only ever handed to the client mid-booking, never on
+    // the public profile page — see comment above.
+    momo_number: null,
+    available_days: provider?.available_days ?? [],
+    available_time: provider?.available_time ?? null,
+    avg_rating: provider?.avg_rating ?? 0,
+    total_reviews: provider?.total_reviews ?? 0,
+    total_bookings: provider?.total_bookings ?? 0,
+  };
+}
+
 export interface ProviderPublicPageData {
   profile: ProviderPublicProfile;
   services: Service[];
   reviews: ReviewWithDetails[];
 }
 
-// Bundles everything needed for the public provider profile page.
+// Bundles everything needed for the public provider profile page. Uses
+// the anon-safe preview (no momo_number/email/student_id) since this page
+// is reachable by unauthenticated visitors.
 export async function getProviderPublicPageData(
   userId: string,
 ): Promise<ProviderPublicPageData | null> {
-  const [profile, providerExt] = await Promise.all([
-    getProviderPublicProfile(userId),
-    getProviderProfile(userId),
+  const [profile, providerExtRow] = await Promise.all([
+    getProviderPublicPreview(userId),
+    // Minimal existence check only — do not fetch full provider_profiles
+    // columns here, this path is reachable by anonymous visitors.
+    db.from("provider_profiles").select("user_id").eq("user_id", userId).maybeSingle(),
   ]);
 
   if (!profile) return null;
 
   const isProvider =
-    profile.roles.includes("provider") || providerExt !== null;
+    profile.roles.includes("provider") || providerExtRow.data !== null;
   if (!isProvider) return null;
 
   const [services, reviews] = await Promise.all([

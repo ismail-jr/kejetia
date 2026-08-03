@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Briefcase, CalendarDays } from "lucide-react";
 
 interface Testimonial {
@@ -100,7 +100,7 @@ export function TestimonialsSection() {
 
         const { data: profiles, error: profilesError } = await supabase
           .from("profiles")
-          .select("user_id, full_name, avatar_url, student_id")
+          .select("user_id, full_name, avatar_url")
           .in("user_id", reviewerIds);
 
         if (profilesError) {
@@ -137,7 +137,10 @@ export function TestimonialsSection() {
         const transformed: Testimonial[] = reviews.map((review) => {
           const profile = profileMap.get(review.reviewer_id);
           const fullName: string = profile?.full_name ?? "UCC Student";
-          const studentId: string = profile?.student_id ?? "UCC Student";
+          // Never surface the real student ID (matriculation number) on the
+          // public landing page — this section is visible to anyone,
+          // logged in or not.
+          const studentId = "Verified UCC Student";
           const avatar: string =
             profile?.avatar_url ??
             `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(fullName)}`;
@@ -208,7 +211,7 @@ export function TestimonialsSection() {
             className="text-muted-foreground max-w-2xl mx-auto font-body"
           >
             Join hundreds of satisfied students who have found success through
-            UCC Connect
+            Kejetia
           </motion.p>
         </motion.div>
 
@@ -268,21 +271,13 @@ export function TestimonialsSection() {
 
                   {/* Reviewer + date */}
                   <div className="flex items-center gap-3 pt-3 border-t border-border/40">
-                    <Avatar className="w-10 h-10 border-2 border-primary/10 shrink-0">
-                      <AvatarImage
-                        src={testimonial.avatar}
-                        alt={testimonial.name}
-                        className="object-cover"
-                      />
-                      <AvatarFallback className="bg-gradient-to-r from-primary/10 to-accent/10 text-primary font-bold text-sm">
-                        {testimonial.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .slice(0, 2)
-                          .toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      name={testimonial.name}
+                      avatarUrl={testimonial.avatar}
+                      className="w-10 h-10 border-2 border-primary/10 shrink-0"
+                      imageClassName="object-cover"
+                      fallbackClassName="bg-gradient-to-r from-primary/10 to-accent/10 text-primary font-bold text-sm"
+                    />
 
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm text-foreground truncate">
