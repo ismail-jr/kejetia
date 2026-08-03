@@ -10,6 +10,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { handleImageError } from "@/lib/utils/image-fallback";
 import { STATUS_CONFIG, PEXELS_FALLBACK } from "./constants";
 import {
   AlertDialog,
@@ -91,6 +92,7 @@ export function ProviderServiceCard({
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             className="object-cover group-hover:scale-105 transition-transform duration-300"
+            onError={handleImageError}
           />
           <div className="absolute top-3 right-3">
             <span

@@ -7,10 +7,11 @@ import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Star, Heart, MapPin, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { handleImageError } from "@/lib/utils/image-fallback";
 import type { Database } from "@/lib/database.types";
 
 type Service = Database["public"]["Tables"]["services"]["Row"] & {
@@ -75,14 +76,6 @@ export default function ServiceCard({
     service.images?.[0] ||
     PEXELS_IMAGES[service.category] ||
     PEXELS_IMAGES.other;
-  const providerInitials =
-    service.profiles?.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "U";
-
   const handleSaveToggle = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -124,6 +117,7 @@ export default function ServiceCard({
           <img
             src={imageUrl}
             alt={service.title}
+            onError={handleImageError}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
           <div className="absolute top-3 left-3">
@@ -159,12 +153,12 @@ export default function ServiceCard({
 
           {/* Provider */}
           <div className="flex items-center gap-2 mb-3">
-            <Avatar className="w-5 h-5">
-              <AvatarImage src={service.profiles?.avatar_url} />
-              <AvatarFallback className="bg-primary text-white text-xs">
-                {providerInitials}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              name={service.profiles?.full_name}
+              avatarUrl={service.profiles?.avatar_url}
+              className="w-5 h-5"
+              fallbackClassName="bg-primary text-white text-xs"
+            />
             <span className="text-xs text-muted-foreground truncate">
               {service.profiles?.full_name || "Anonymous"}
             </span>

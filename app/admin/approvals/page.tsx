@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { CheckCircle, XCircle, Eye, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { handleImageError } from '@/lib/utils/image-fallback';
 import type { Database } from '@/lib/database.types';
 
 type Service = Database['public']['Tables']['services']['Row'] & {
@@ -131,6 +132,7 @@ export default function AdminApprovalsPage() {
                 <img
                   src={service.images?.[0] || PEXELS_FALLBACK}
                   alt=""
+                  onError={handleImageError}
                   className="w-16 h-14 rounded-xl object-cover flex-shrink-0"
                 />
                 <div className="flex-1 min-w-0">
@@ -160,6 +162,7 @@ export default function AdminApprovalsPage() {
               <img
                 src={selected.images?.[0] || PEXELS_FALLBACK}
                 alt={selected.title}
+                onError={handleImageError}
                 className="w-full h-48 object-cover"
               />
               <div className="p-5 space-y-4">

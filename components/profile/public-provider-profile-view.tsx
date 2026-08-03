@@ -10,7 +10,7 @@ import {
   MessageSquare,
   Wallet,
 } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,6 +18,7 @@ import { ReviewList } from "@/app/provider/reviews/components/review-list";
 import { MessageUserButton } from "@/components/messaging/message-user-button";
 import type { ProviderPublicPageData } from "@/lib/data/profiles";
 import type { Service } from "@/lib/data/types";
+import { handleImageError } from "@/lib/utils/image-fallback";
 
 const PEXELS_FALLBACK =
   "https://images.pexels.com/photos/3184306/pexels-photo-3184306.jpeg?auto=compress&cs=tinysrgb&w=400";
@@ -36,29 +37,19 @@ export function PublicProviderProfileView({
   const { profile: provider, services, reviews } = data;
   const isProvider = provider.roles.includes("provider");
 
-  const initials =
-    provider.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "PV";
-
   return (
     <div className="max-w-5xl mx-auto px-4 py-10 space-y-8">
       {/* Header */}
       <div className="bg-card rounded-2xl border border-border/50 p-6 sm:p-8 shadow-sm">
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-          <Avatar className="w-24 h-24 border-2 border-primary/20 rounded-2xl">
-            <AvatarImage
-              src={provider.avatar_url || ""}
-              alt={provider.full_name || "Provider"}
-              className="object-cover"
-            />
-            <AvatarFallback className="bg-muted text-muted-foreground text-xl font-bold rounded-2xl">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            name={provider.full_name}
+            avatarUrl={provider.avatar_url}
+            fallbackText="PV"
+            className="w-24 h-24 border-2 border-primary/20 rounded-2xl"
+            imageClassName="object-cover"
+            fallbackClassName="bg-muted text-muted-foreground text-xl font-bold rounded-2xl"
+          />
 
           <div className="flex-1 space-y-3 text-center sm:text-left w-full">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -268,6 +259,7 @@ export function PublicProviderProfileView({
                   <img
                     src={serviceImage(service)}
                     alt={service.title}
+                    onError={handleImageError}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                   <Badge className="absolute top-2 left-2 capitalize text-xs">
