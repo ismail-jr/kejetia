@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import {
   User,
   Phone,
@@ -143,10 +143,18 @@ export default function StudentProfile({
         return;
       }
 
+      const { data: sessionData } = await supabase.auth.getUser();
+      if (!sessionData?.user?.id) {
+        toast.error("Please sign in again to upload a photo");
+        return;
+      }
+
       setUploading(true);
       const fileExt = file.name.split(".").pop();
       const uniqueId = Math.random().toString(36).substring(2, 15);
-      const filePath = `student-${uniqueId}-${Date.now()}.${fileExt}`;
+      // Storage RLS scopes writes to "<user_id>/..." — this prefix is
+      // load-bearing, not cosmetic.
+      const filePath = `${sessionData.user.id}/${uniqueId}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
@@ -159,19 +167,16 @@ export default function StudentProfile({
       } = supabase.storage.from("avatars").getPublicUrl(filePath);
       setValue("avatar_url", publicUrl, { shouldDirty: true });
 
-      const { data: sessionData } = await supabase.auth.getUser();
-      if (sessionData?.user?.id) {
-        const { error: dbError } = await supabase
-          .from("profiles")
-          .update({
-            avatar_url: publicUrl,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("user_id", sessionData.user.id);
+      const { error: dbError } = await supabase
+        .from("profiles")
+        .update({
+          avatar_url: publicUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", sessionData.user.id);
 
-        if (dbError) throw dbError;
-        if (initialData) initialData.avatar_url = publicUrl;
-      }
+      if (dbError) throw dbError;
+      if (initialData) initialData.avatar_url = publicUrl;
 
       toast.success("Profile picture updated and saved permanently!");
     } catch (error: any) {
@@ -182,13 +187,6 @@ export default function StudentProfile({
     }
   };
 
-  const initials =
-    watch("full_name")
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "ST";
   const isLoading = externalLoading || isSubmitting;
 
   return (
@@ -201,16 +199,14 @@ export default function StudentProfile({
       </h2>
 
       <div className="flex flex-col sm:flex-row items-center gap-5 p-4 rounded-xl bg-muted/20 border border-border/40">
-        <Avatar className="w-20 h-20 border border-border">
-          <AvatarImage
-            src={currentAvatarUrl}
-            alt="Avatar preview"
-            className="object-cover"
-          />
-          <AvatarFallback className="bg-muted text-transparent rounded-full animate-pulse">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar
+          name={watch("full_name")}
+          avatarUrl={currentAvatarUrl}
+          fallbackText="ST"
+          className="w-20 h-20 border border-border"
+          imageClassName="object-cover"
+          fallbackClassName="bg-muted text-transparent rounded-full animate-pulse"
+        />
         <div className="space-y-1.5 flex-1 w-full text-center sm:text-left">
           <Label className="font-semibold text-xs text-muted-foreground uppercase tracking-wider block">
             Profile Image

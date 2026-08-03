@@ -1,5 +1,5 @@
 // components/profile/public-preview-view.tsx
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   MapPin,
@@ -28,28 +28,18 @@ interface PublicPreviewViewProps {
 export function PublicPreviewView({ provider }: PublicPreviewViewProps) {
   const isProvider = provider.roles?.includes("provider");
 
-  const initials =
-    provider.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "PV";
-
   return (
     <div className="max-w-4xl mx-auto px-4 py-10 space-y-8">
       {/* Header Profile Card */}
       <div className="bg-card rounded-2xl border border-border/50 p-6 sm:p-8 shadow-sm flex flex-col sm:flex-row items-center sm:items-start gap-6">
-        <Avatar className="w-24 h-24 border-2 border-primary/20 rounded-2xl">
-          <AvatarImage
-            src={provider.avatar_url || ""}
-            alt={provider.full_name || "Provider"}
-            className="object-cover"
-          />
-          <AvatarFallback className="bg-muted text-muted-foreground text-xl font-bold rounded-2xl">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar
+          name={provider.full_name}
+          avatarUrl={provider.avatar_url}
+          fallbackText="PV"
+          className="w-24 h-24 border-2 border-primary/20 rounded-2xl"
+          imageClassName="object-cover"
+          fallbackClassName="bg-muted text-muted-foreground text-xl font-bold rounded-2xl"
+        />
 
         <div className="flex-1 space-y-3 text-center sm:text-left w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">

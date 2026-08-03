@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Users, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { cn } from "@/lib/utils";
 
 // Use the same Booking type as the parent
@@ -66,23 +66,18 @@ export function RecentOrders({
         <div className="space-y-3">
           {orders.map((order) => {
             const status = statusMap[order.status] || statusMap.pending;
-            const initials =
-              order.profiles?.full_name
-                ?.split(" ")
-                .map((n) => n[0])
-                .join("")
-                .slice(0, 2) || "S";
             return (
               <div
                 key={order.id}
                 className="flex items-center gap-4 p-3.5 rounded-xl border border-border/40 hover:bg-muted/40 transition-colors"
               >
-                <Avatar className="w-10 h-10 flex-shrink-0">
-                  <AvatarImage src={order.profiles?.avatar_url || undefined} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  name={order.profiles?.full_name}
+                  avatarUrl={order.profiles?.avatar_url}
+                  fallbackText="S"
+                  className="w-10 h-10 flex-shrink-0"
+                  fallbackClassName="bg-primary/10 text-primary text-xs font-bold"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-foreground truncate font-heading leading-tight">
                     {order.services?.title || "Service"}

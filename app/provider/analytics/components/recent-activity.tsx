@@ -1,7 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Clock, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,24 +46,19 @@ export function RecentActivity({ bookings, loading }: RecentActivityProps) {
           STATUS_ICONS[booking.status as keyof typeof STATUS_ICONS] ||
           STATUS_ICONS.pending;
         const StatusIcon = statusConfig.icon;
-        const initials =
-          booking.student?.full_name
-            ?.split(" ")
-            .map((n: string) => n[0])
-            .join("")
-            .slice(0, 2) || "S";
 
         return (
           <div
             key={booking.id}
             className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
           >
-            <Avatar className="w-8 h-8 flex-shrink-0">
-              <AvatarImage src={booking.student?.avatar_url} />
-              <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              name={booking.student?.full_name}
+              avatarUrl={booking.student?.avatar_url}
+              fallbackText="S"
+              className="w-8 h-8 flex-shrink-0"
+              fallbackClassName="bg-primary/10 text-primary text-xs font-bold"
+            />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground truncate">
                 {booking.services?.title || "Service"}

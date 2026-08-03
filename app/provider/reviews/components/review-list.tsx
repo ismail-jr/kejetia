@@ -1,7 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock } from "lucide-react";
@@ -76,25 +76,19 @@ export function ReviewList({ reviews, loading }: ReviewListProps) {
   return (
     <div className="space-y-4">
       {reviews.map((review) => {
-        const initials =
-          review.reviewer?.full_name
-            ?.split(" ")
-            .map((n) => n[0])
-            .join("")
-            .slice(0, 2) || "S";
-
         return (
           <Card
             key={review.id}
             className="rounded-2xl border border-border/60 p-6 hover:shadow-lg transition-all duration-300 group"
           >
             <div className="flex items-start gap-4">
-              <Avatar className="w-12 h-12 flex-shrink-0 ring-2 ring-primary/10 ring-offset-2 ring-offset-background">
-                <AvatarImage src={review.reviewer?.avatar_url || undefined} />
-                <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/5 text-primary font-bold text-sm">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                name={review.reviewer?.full_name}
+                avatarUrl={review.reviewer?.avatar_url}
+                fallbackText="S"
+                className="w-12 h-12 flex-shrink-0 ring-2 ring-primary/10 ring-offset-2 ring-offset-background"
+                fallbackClassName="bg-gradient-to-br from-primary/20 to-primary/5 text-primary font-bold text-sm"
+              />
 
               <div className="flex-1 min-w-0">
                 {/* Header */}

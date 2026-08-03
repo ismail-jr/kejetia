@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import {
   ClipboardList,
   MessageSquare,
@@ -95,20 +95,6 @@ export function OrderCard({
 
   const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
   const StatusIcon = statusConfig.icon;
-
-  // Get initials with better fallback
-  const getInitials = () => {
-    if (student?.full_name) {
-      const names = student.full_name.split(" ");
-      if (names.length >= 2) {
-        return names[0][0] + names[1][0];
-      }
-      return names[0][0] || "S";
-    }
-    return "S";
-  };
-
-  const initials = getInitials();
 
   const nextStep = NEXT_STATUS[order.status];
   const amount = Number((order.total_amount ?? order.base_amount) || 0);
@@ -219,15 +205,14 @@ export function OrderCard({
                   <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1.5">
                     {/* Enhanced Avatar with ring */}
                     <div className="relative">
-                      <Avatar className="w-8 h-8 flex-shrink-0 ring-2 ring-primary/20 ring-offset-2 ring-offset-background">
-                        <AvatarImage
-                          src={student?.avatar_url || undefined}
-                          className="object-cover"
-                        />
-                        <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/10 text-primary font-bold text-sm">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar
+                        name={student?.full_name}
+                        avatarUrl={student?.avatar_url}
+                        fallbackText="S"
+                        className="w-8 h-8 flex-shrink-0 ring-2 ring-primary/20 ring-offset-2 ring-offset-background"
+                        imageClassName="object-cover"
+                        fallbackClassName="bg-gradient-to-br from-primary/30 to-primary/10 text-primary font-bold text-sm"
+                      />
                       <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-background rounded-full"></span>
                     </div>
                     <div className="flex flex-col">

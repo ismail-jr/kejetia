@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { PageSpinner } from "@/components/shared/spinner";
 import {
   LayoutDashboard,
   Users,
@@ -57,19 +58,11 @@ export default function AdminLayout({
   }, [user, isAdmin, activeRole, loading, router, setActiveRole]);
 
   if (loading || !user || !isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageSpinner containerClassName="bg-background" />;
   }
 
   if (activeRole !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <PageSpinner containerClassName="bg-background" />;
   }
 
   return <DashboardLayout navItems={NAV_ITEMS}>{children}</DashboardLayout>;

@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   searchMessageableUsers,
@@ -21,16 +21,6 @@ interface NewChatDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectUser: (user: ConversationParticipantProfile) => void;
-}
-
-function initials(name?: string | null) {
-  return (
-    name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2) || "U"
-  );
 }
 
 export function NewChatDialog({
@@ -108,12 +98,12 @@ export function NewChatDialog({
                   onOpenChange(false);
                 }}
               >
-                <Avatar className="w-9 h-9">
-                  <AvatarImage src={user.avatar_url || undefined} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                    {initials(user.full_name)}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  name={user.full_name}
+                  avatarUrl={user.avatar_url}
+                  className="w-9 h-9"
+                  fallbackClassName="bg-primary/10 text-primary text-xs font-bold"
+                />
                 <span className="font-medium text-sm truncate">
                   {user.full_name}
                 </span>

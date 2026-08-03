@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { PageSpinner } from "@/components/shared/spinner";
 import {
   LayoutDashboard,
   Briefcase,
@@ -69,9 +70,7 @@ export default function ProviderLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
+      <PageSpinner containerClassName="bg-background" />
     );
   }
 

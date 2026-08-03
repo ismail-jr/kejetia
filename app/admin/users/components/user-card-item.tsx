@@ -10,7 +10,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -42,13 +42,6 @@ export function UserCardItem({
   onUpdateRole,
   onSetVerified,
 }: UserCardItemProps) {
-  const initials =
-    user.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2) || "U";
-
   const coreUserId = user.user_id;
   const activeSessionRole = user.active_role || "student";
   const userRolesList =
@@ -58,12 +51,12 @@ export function UserCardItem({
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 hover:bg-muted/30 transition-colors">
       <div className="flex items-center gap-4 min-w-0 flex-1">
-        <Avatar className="w-10 h-10 flex-shrink-0">
-          <AvatarImage src={user.avatar_url || undefined} />
-          <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar
+          name={user.full_name}
+          avatarUrl={user.avatar_url}
+          className="w-10 h-10 flex-shrink-0"
+          fallbackClassName="bg-primary/10 text-primary text-sm font-bold"
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className="font-semibold text-sm text-foreground truncate font-heading">

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Star, MapPin, Clock, DollarSign, TrendingUp } from "lucide-react";
 
@@ -62,14 +62,6 @@ export function ServiceCard({ service }: ServiceCardProps) {
   const rating = parseFloat(service.avg_rating);
   const hasRating = rating > 0;
   const imageUrl = service.images?.[0] || "/images/placeholder-service.jpg";
-  const initials =
-    service.profiles?.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "U";
-
   return (
     <motion.div
       whileHover={{ y: -6 }}
@@ -129,10 +121,12 @@ export function ServiceCard({ service }: ServiceCardProps) {
 
           {/* Provider Info */}
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Avatar className="w-5 h-5">
-              <AvatarImage src={service.profiles?.avatar_url} />
-              <AvatarFallback className="text-[8px]">{initials}</AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              name={service.profiles?.full_name}
+              avatarUrl={service.profiles?.avatar_url}
+              className="w-5 h-5"
+              fallbackClassName="text-[8px]"
+            />
             <span className="truncate">
               {service.profiles?.full_name || "UCC Student"}
             </span>

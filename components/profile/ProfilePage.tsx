@@ -7,7 +7,7 @@ import {
   upsertProviderProfile,
   getProviderProfile,
 } from "@/lib/data";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import StudentProfile from "@/components/profile/student-profile";
@@ -109,14 +109,6 @@ export default function ProfilePage({ forcedRole }: ProfilePageProps) {
     }
   };
 
-  const initials =
-    profile?.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "U";
-
   return (
     <div className="space-y-8">
       <div>
@@ -129,15 +121,12 @@ export default function ProfilePage({ forcedRole }: ProfilePageProps) {
       </div>
 
       <div className="bg-card rounded-2xl border border-border/50 p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-5">
-        <Avatar className="w-20 h-20 border border-border">
-          <AvatarImage
-            src={profile?.avatar_url ?? ""}
-            alt={profile?.full_name ?? "Account User"}
-          />
-          <AvatarFallback className="bg-muted text-transparent rounded-full animate-pulse">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar
+          name={profile?.full_name}
+          avatarUrl={profile?.avatar_url}
+          className="w-20 h-20 border border-border"
+          fallbackClassName="bg-muted text-transparent rounded-full animate-pulse"
+        />
         <div className="space-y-1">
           <h2 className="text-xl font-bold text-foreground font-heading">
             {profile?.full_name || "Kejetia User"}

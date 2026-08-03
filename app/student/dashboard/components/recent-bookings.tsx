@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Calendar, ArrowRight } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -64,24 +64,18 @@ export function RecentBookings({
       ) : (
         <div className="space-y-3">
           {bookings.map((booking) => {
-            const initials =
-              booking.profiles?.full_name
-                ?.split(" ")
-                .map((n) => n[0])
-                .join("")
-                .slice(0, 2) || "S";
-
             return (
               <div
                 key={booking.id}
                 className="flex items-center gap-4 p-3.5 rounded-xl border border-border/40 hover:bg-muted/40 transition-colors"
               >
-                <Avatar className="w-10 h-10 flex-shrink-0">
-                  <AvatarImage src={booking.profiles?.avatar_url} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  name={booking.profiles?.full_name}
+                  avatarUrl={booking.profiles?.avatar_url}
+                  fallbackText="S"
+                  className="w-10 h-10 flex-shrink-0"
+                  fallbackClassName="bg-primary/10 text-primary text-xs font-bold"
+                />
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-foreground truncate font-heading leading-tight">
                     {booking.services?.title || "Service"}

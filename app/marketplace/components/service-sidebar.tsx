@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   Pencil,
@@ -45,14 +45,6 @@ export function ServiceSidebar({
   pricingType,
   tags = [],
 }: ServiceSidebarProps) {
-  const initials =
-    profiles?.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase() || "U";
-
   const getPricingIcon = (type: string | null) => {
     switch (type) {
       case "hourly":
@@ -128,12 +120,12 @@ export function ServiceSidebar({
       {/* Provider Card */}
       <div className="p-4 bg-card border border-border rounded-xl space-y-3">
         <div className="flex items-center gap-3">
-          <Avatar className="w-12 h-12">
-            <AvatarImage src={profiles?.avatar_url || undefined} />
-            <AvatarFallback className="bg-primary/10 text-primary font-bold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            name={profiles?.full_name}
+            avatarUrl={profiles?.avatar_url}
+            className="w-12 h-12"
+            fallbackClassName="bg-primary/10 text-primary font-bold"
+          />
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-foreground text-sm truncate">
               {profiles?.full_name || "UCC Student"}

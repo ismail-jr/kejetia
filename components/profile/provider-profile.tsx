@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   User,
@@ -202,10 +202,18 @@ export default function ProviderProfile({
         return;
       }
 
+      const { data: sessionData } = await supabase.auth.getUser();
+      if (!sessionData?.user?.id) {
+        toast.error("Please sign in again to upload a photo");
+        return;
+      }
+
       setUploading(true);
       const fileExt = file.name.split(".").pop();
       const uniqueId = Math.random().toString(36).substring(2, 15);
-      const filePath = `provider-${uniqueId}-${Date.now()}.${fileExt}`;
+      // Storage RLS scopes writes to "<user_id>/..." — this prefix is
+      // load-bearing, not cosmetic.
+      const filePath = `${sessionData.user.id}/${uniqueId}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
@@ -216,7 +224,6 @@ export default function ProviderProfile({
       const {
         data: { publicUrl },
       } = supabase.storage.from("avatars").getPublicUrl(filePath);
-      const { data: sessionData } = await supabase.auth.getUser();
 
       if (sessionData?.user?.id) {
         const { error: dbError } = await supabase
@@ -241,14 +248,6 @@ export default function ProviderProfile({
       setUploading(false);
     }
   };
-
-  const initials =
-    watch("full_name")
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) || "PV";
 
   const isLoading = externalLoading || isSubmitting;
 
@@ -293,16 +292,14 @@ export default function ProviderProfile({
           </h2>
 
           <div className="flex flex-col sm:flex-row items-center gap-5 p-4 rounded-xl bg-muted/20 border border-border/40">
-            <Avatar className="w-20 h-20 border border-border rounded-xl">
-              <AvatarImage
-                src={currentAvatarUrl}
-                alt="Provider Logo"
-                className="object-cover"
-              />
-              <AvatarFallback className="bg-muted text-transparent rounded-xl animate-pulse">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              name={watch("full_name")}
+              avatarUrl={currentAvatarUrl}
+              fallbackText="PV"
+              className="w-20 h-20 border border-border rounded-xl"
+              imageClassName="object-cover"
+              fallbackClassName="bg-muted text-transparent rounded-xl animate-pulse"
+            />
             <div className="space-y-1.5 flex-1 w-full text-center sm:text-left">
               <Label className="font-semibold text-xs text-muted-foreground uppercase tracking-wider block">
                 Service Brand Logo
