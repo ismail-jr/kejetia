@@ -633,6 +633,27 @@ export type Database = {
         Args: { other_user_id: string }
         Returns: string
       }
+      get_or_create_booking_conversation: {
+        Args: { p_booking_id: string }
+        Returns: string
+      }
+      get_conversation_previews: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          type: "direct" | "booking"
+          booking_id: string | null
+          last_message_at: string
+          other_user_id: string | null
+          other_full_name: string | null
+          other_avatar_url: string | null
+          last_message_content: string | null
+          last_message_attachments: string[] | null
+          last_message_created_at: string | null
+          last_message_sender_id: string | null
+          unread_count: number
+        }[]
+      }
       refresh_profile_roles: {
         Args: { p_user_id: string }
         Returns: undefined
