@@ -654,6 +654,15 @@ export type Database = {
           unread_count: number
         }[]
       }
+      get_platform_stats: {
+        Args: Record<string, never>
+        Returns: {
+          active_users: number
+          services_listed: number
+          average_rating: number
+          success_rate: number
+        }[]
+      }
       refresh_profile_roles: {
         Args: { p_user_id: string }
         Returns: undefined

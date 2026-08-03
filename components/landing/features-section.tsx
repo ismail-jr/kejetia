@@ -14,6 +14,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { fetchPlatformStats, type PlatformStats } from "@/lib/data/platform-stats";
+import { describeSupabaseError } from "@/lib/utils/errors";
 
 const FEATURES_GRID = [
   {
@@ -150,7 +151,7 @@ export function FeaturesSection() {
         if (!cancelled) setStats(data);
       })
       .catch((err) => {
-        console.error("Failed to load platform stats:", err);
+        console.error("Failed to load platform stats:", describeSupabaseError(err));
         if (!cancelled) {
           setStats({
             activeUsers: 0,
