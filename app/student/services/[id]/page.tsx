@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +32,9 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { handleImageError } from "@/lib/utils/image-fallback";
 import type { Database } from "@/lib/database.types";
+import { createBooking } from "@/lib/data/bookings";
 
 type Service = Database["public"]["Tables"]["services"]["Row"] & {
   profiles?: {
@@ -118,23 +120,41 @@ export default function ServiceDetailPage() {
 
   const handleBook = async () => {
     if (!user || !profile || !service) return;
+    if (service.provider_id === user.id) {
+      toast.error("You cannot book your own service.");
+      return;
+    }
     setBooking(true);
     try {
-      const { error } = await (supabase.from("bookings") as any).insert({
+      const selected = bookingDate ? new Date(bookingDate) : null;
+      const appointmentDate =
+        selected && !Number.isNaN(selected.getTime())
+          ? selected.toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+      const appointmentTime =
+        selected && !Number.isNaN(selected.getTime())
+          ? selected.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          : "08:00 AM - 05:00 PM";
+
+      await createBooking({
         service_id: service.id,
-        student_id: user.id,
+        client_id: user.id,
         provider_id: service.provider_id,
-        booking_date: bookingDate || null,
-        notes: bookingNotes,
-        amount: service.price,
         status: "pending",
+        appointment_date: appointmentDate,
+        appointment_time: appointmentTime,
+        payment_term: "after_service",
+        notes: bookingNotes.trim() || null,
+        base_amount: service.price,
+        total_amount: service.price,
+        payment_status: "unpaid",
       });
-      if (error) throw error;
       toast.success("Booking request sent!");
       setShowBooking(false);
       router.push("/student/bookings");
-    } catch {
-      toast.error("Failed to submit booking");
+    } catch (err: any) {
+      console.error("Failed to submit booking:", err);
+      toast.error(err.message || "Failed to submit booking");
     } finally {
       setBooking(false);
     }
@@ -170,13 +190,6 @@ export default function ServiceDetailPage() {
   }
 
   const images = service.images?.length ? service.images : [PEXELS_FALLBACK];
-  const providerInitials =
-    service.profiles?.full_name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2) || "U";
-
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Back button */}
@@ -193,6 +206,7 @@ export default function ServiceDetailPage() {
               <img
                 src={images[selectedImage]}
                 alt={service.title}
+                onError={handleImageError}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -212,6 +226,7 @@ export default function ServiceDetailPage() {
                     <img
                       src={img}
                       alt=""
+                      onError={handleImageError}
                       className="w-full h-full object-cover"
                     />
                   </button>
@@ -276,16 +291,12 @@ export default function ServiceDetailPage() {
               <div className="space-y-5">
                 {reviews.map((review) => (
                   <div key={review.id} className="flex gap-3">
-                    <Avatar className="w-9 h-9 flex-shrink-0">
-                      <AvatarImage src={review.profiles?.avatar_url} />
-                      <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                        {review.profiles?.full_name
-                          ?.split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      name={review.profiles?.full_name}
+                      avatarUrl={review.profiles?.avatar_url}
+                      className="w-9 h-9 flex-shrink-0"
+                      fallbackClassName="bg-primary/10 text-primary text-xs font-bold"
+                    />
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-medium text-sm">
@@ -372,12 +383,12 @@ export default function ServiceDetailPage() {
                 About the Provider
               </h3>
               <div className="flex items-center gap-3 mb-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarImage src={service.profiles?.avatar_url || undefined} />
-                  <AvatarFallback className="bg-primary text-white text-sm font-bold">
-                    {providerInitials}
-                  </AvatarFallback>
-                </Avatar>
+                <UserAvatar
+                  name={service.profiles?.full_name}
+                  avatarUrl={service.profiles?.avatar_url}
+                  className="w-10 h-10"
+                  fallbackClassName="bg-primary text-white text-sm font-bold"
+                />
                 <div>
                   <div className="font-medium text-sm flex items-center gap-1">
                     {service.profiles?.full_name}
