@@ -48,7 +48,7 @@ secrets (OTP email delivery, password sign-in, login-attempt rate limiting).
 Form + Zod · Supabase JS (`@supabase/ssr`)
 
 **Backend** — Node.js · Express 5 · Supabase Admin SDK · Redis (OTP storage & rate limiting,
-with an automatic in-memory fallback) · Nodemailer
+with an automatic in-memory fallback) · Brevo (transactional email over HTTPS)
 
 **Data & Infra** — Supabase (Postgres, Auth, Storage, Realtime) · Redis (Upstash recommended) ·
 Vercel (frontend hosting) · Render (backend hosting)
@@ -93,7 +93,8 @@ kejetia/
 - A [Supabase](https://supabase.com) project
 - A Redis instance — [Upstash](https://console.upstash.com) recommended (free tier, no
   inactivity auto-deletion)
-- An SMTP account for sending OTP emails (Gmail App Password works fine for development)
+- A [Brevo](https://www.brevo.com) account for sending OTP emails (free tier is enough; SMTP is
+  avoided on purpose since Render and most free-tier hosts block outbound SMTP ports)
 
 ### 1. Clone and install
 
@@ -115,22 +116,28 @@ NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
 NEXT_PUBLIC_ADMIN_EMAIL=your_admin_email
 ```
 
-**Backend** — copy `backend/.env.example` to `backend/.env` and fill in:
+**Backend** — create `backend/.env` and fill in:
 
 ```env
 PORT=5000
 ALLOWED_ORIGINS=http://localhost:3000
+APP_URL=http://localhost:3000
 
 SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key   # server only — never expose to the browser
 
 REDIS_URL=rediss://default:password@your-db.upstash.io:6379
 
-SMTP_SERVICE=gmail
-SMTP_USER=your-address@gmail.com
-SMTP_PASS=your-16-char-app-password
-EMAIL_FROM=your-address@gmail.com
+BREVO_API_KEY=xkeysib-your-api-key
+EMAIL_FROM=no-reply@yourdomain.com
+EMAIL_FROM_NAME=Kejetia
 ```
+
+To get `BREVO_API_KEY`: create a free account at [brevo.com](https://www.brevo.com), verify a
+sender email/domain under **Senders & IP**, then create a key under **SMTP & API > API Keys**.
+Emails send over Brevo's HTTPS API rather than SMTP, since Render (and most free-tier hosts)
+block outbound traffic on SMTP ports 25/465/587 — the exact failure mode that broke Gmail SMTP
+delivery in production.
 
 > If Redis is ever unreachable, the backend automatically falls back to an in-process memory
 > store (`backend/src/config/memory-store.js`) so registration and login keep working on a
@@ -189,7 +196,7 @@ authenticate unless both are running.
 1. User submits email, name, student ID, role, and password.
 2. Backend validates the email is a UCC address, creates an unconfirmed Supabase Auth user, and
    generates a 6-digit OTP, storing its hash + pending profile data in Redis with a 10-minute TTL.
-3. OTP is emailed via Nodemailer.
+3. OTP is emailed via Brevo's transactional email API.
 4. User submits the code; on match, the backend confirms the email, provisions the chosen role
    (student/provider profile row), and returns a session.
 

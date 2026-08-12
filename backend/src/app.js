@@ -2,13 +2,13 @@ const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth-route");
 const { connectRedis } = require("./config/redis");
-const { verifyTransporter } = require("./services/email-service");
+const { verifyEmailService } = require("./services/email-service");
 require("dotenv").config();
 
 connectRedis();
-// Validate SMTP config at boot so mail problems show up in logs early
-// (non-fatal — the gateway still starts).
-verifyTransporter();
+// Validate the Brevo API key at boot so mail problems show up in logs
+// early (non-fatal — the gateway still starts).
+verifyEmailService();
 const app = express();
 const PORT = process.env.PORT || 5000;
 

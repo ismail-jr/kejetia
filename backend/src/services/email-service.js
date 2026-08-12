@@ -1,86 +1,82 @@
-const nodemailer = require("nodemailer");
 require("dotenv").config();
 
 // ─────────────────────────────────────────────
-// Transport configuration
+// Transactional email via Brevo's HTTP API
 // ─────────────────────────────────────────────
 //
-// Supports two ways to configure SMTP:
-//   1. A well-known service via SMTP_SERVICE (e.g. "gmail"), which lets
-//      nodemailer pick the right host/port/security automatically. With
-//      Gmail you MUST use an App Password, not your normal password.
-//   2. Explicit SMTP_HOST / SMTP_PORT (+ SMTP_SECURE) for any provider.
+// Render (and most free-tier PaaS providers) block outbound traffic on the
+// SMTP ports 25/465/587 that nodemailer + Gmail relied on, so OTP delivery
+// would time out in production even with correct credentials. Brevo's REST
+// API sends mail over plain HTTPS (port 443), which is never blocked, so
+// it's used instead of SMTP everywhere — including local development, to
+// keep behavior identical.
 //
-// `secure` is true for port 465 (implicit TLS) and false otherwise
-// (STARTTLS on 587/25). It can be forced with SMTP_SECURE=true|false.
+// Setup: create a free account at https://www.brevo.com, verify a sender
+// email/domain under Senders & IP, then create an API key under
+// SMTP & API > API Keys. Set BREVO_API_KEY and EMAIL_FROM accordingly.
+// Docs: https://developers.brevo.com/reference/send-transac-email
 
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || "587", 10);
+const BREVO_SEND_URL = "https://api.brevo.com/v3/smtp/email";
+const BREVO_ACCOUNT_URL = "https://api.brevo.com/v3/account";
 
-const resolveSecure = () => {
-  if (typeof process.env.SMTP_SECURE === "string") {
-    return process.env.SMTP_SECURE.toLowerCase() === "true";
+const FROM_ADDRESS = process.env.EMAIL_FROM || "no-reply@kejetia.app";
+const FROM_NAME = process.env.EMAIL_FROM_NAME || "Kejetia";
+
+const apiKey = () => process.env.BREVO_API_KEY;
+
+const brevoRequest = async (url, options = {}) => {
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": apiKey() || "",
+      ...options.headers,
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(
+      body?.message || `Brevo request failed with status ${res.status}`,
+    );
   }
-  return SMTP_PORT === 465;
+
+  return res.json().catch(() => ({}));
 };
 
-const FROM_ADDRESS =
-  process.env.EMAIL_FROM || process.env.SMTP_USER || "no-reply@kejetia.app";
-
-let transporter;
-
-const buildTransporter = () => {
-  const base = {
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    // A small pool keeps OTP delivery snappy under load without opening a
-    // fresh connection per email.
-    pool: true,
-    maxConnections: 3,
-  };
-
-  if (process.env.SMTP_SERVICE) {
-    return nodemailer.createTransport({
-      service: process.env.SMTP_SERVICE,
-      ...base,
-    });
-  }
-
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: SMTP_PORT,
-    secure: resolveSecure(),
-    ...base,
+const sendEmail = async ({ to, subject, text, html }) => {
+  await brevoRequest(BREVO_SEND_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      sender: { name: FROM_NAME, email: FROM_ADDRESS },
+      to: [{ email: to }],
+      subject,
+      textContent: text,
+      htmlContent: html,
+    }),
   });
 };
 
-const getTransporter = () => {
-  if (!transporter) {
-    transporter = buildTransporter();
-  }
-  return transporter;
-};
-
-// Validates the SMTP configuration/credentials at startup. Logs a clear
-// message either way; never throws, so a misconfigured mailer surfaces in
-// logs without crashing the whole gateway on boot.
-const verifyTransporter = async () => {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+// Validates the Brevo API key at startup. Logs a clear message either way;
+// never throws, so a misconfigured mailer surfaces in logs without
+// crashing the whole gateway on boot.
+const verifyEmailService = async () => {
+  if (!apiKey()) {
     console.warn(
-      "[email] SMTP_USER / SMTP_PASS not set — OTP emails will fail. " +
-        "Set SMTP_SERVICE (e.g. gmail) or SMTP_HOST/SMTP_PORT plus " +
-        "SMTP_USER/SMTP_PASS and EMAIL_FROM.",
+      "[email] BREVO_API_KEY not set — OTP emails will fail. Create a key " +
+        "at app.brevo.com > SMTP & API > API Keys, verify a sender under " +
+        "Senders & IP, then set BREVO_API_KEY and EMAIL_FROM.",
     );
     return false;
   }
 
   try {
-    await getTransporter().verify();
-    console.log("[email] SMTP transport verified and ready.");
+    await brevoRequest(BREVO_ACCOUNT_URL);
+    console.log("[email] Brevo API key verified and ready.");
     return true;
   } catch (err) {
-    console.error("[email] SMTP verification failed:", err.message);
+    console.error("[email] Brevo verification failed:", err.message);
     return false;
   }
 };
@@ -125,19 +121,16 @@ const otpTemplate = (otpCode, expiryMinutes) => `
 // back a half-created account and tell the user delivery failed) instead
 // of silently proceeding as if the email went out.
 const sendOtpEmail = async (toEmail, otpCode, expiryMinutes = 10) => {
-  const mailOptions = {
-    from: `"Kejetia" <${FROM_ADDRESS}>`,
-    to: toEmail,
-    subject: `${otpCode} is your Kejetia verification code`,
-    text:
-      `Your Kejetia verification code is ${otpCode}. ` +
-      `It expires in ${expiryMinutes} minutes. ` +
-      `If you did not request this, you can ignore this email.`,
-    html: otpTemplate(otpCode, expiryMinutes),
-  };
-
   try {
-    await getTransporter().sendMail(mailOptions);
+    await sendEmail({
+      to: toEmail,
+      subject: `${otpCode} is your Kejetia verification code`,
+      text:
+        `Your Kejetia verification code is ${otpCode}. ` +
+        `It expires in ${expiryMinutes} minutes. ` +
+        `If you did not request this, you can ignore this email.`,
+      html: otpTemplate(otpCode, expiryMinutes),
+    });
   } catch (err) {
     console.error("[email] Failed to send OTP email:", err.message);
     throw new Error("Failed to send verification email");
@@ -210,25 +203,22 @@ const sendVerificationSuccessEmail = async (toEmail, fullName, role = "student")
   const firstName = (fullName || "there").trim().split(/\s+/)[0];
   const loginUrl = `${process.env.APP_URL || "https://kejetia.app"}/login`;
 
-  const mailOptions = {
-    from: `"Kejetia" <${FROM_ADDRESS}>`,
-    to: toEmail,
-    subject: `You're all set, ${firstName}! Your Kejetia account is verified`,
-    text:
-      `Hi ${firstName},\n\n` +
-      `Your email has been verified and your ${workspace} account on Kejetia is ready.\n\n` +
-      `${roleNextStep(role)}\n\n` +
-      `Sign in here: ${loginUrl}\n\n` +
-      `— The Kejetia team`,
-    html: verificationSuccessTemplate(fullName, role),
-  };
-
   try {
-    await getTransporter().sendMail(mailOptions);
+    await sendEmail({
+      to: toEmail,
+      subject: `You're all set, ${firstName}! Your Kejetia account is verified`,
+      text:
+        `Hi ${firstName},\n\n` +
+        `Your email has been verified and your ${workspace} account on Kejetia is ready.\n\n` +
+        `${roleNextStep(role)}\n\n` +
+        `Sign in here: ${loginUrl}\n\n` +
+        `— The Kejetia team`,
+      html: verificationSuccessTemplate(fullName, role),
+    });
   } catch (err) {
     console.error("[email] Failed to send verification success email:", err.message);
     throw new Error("Failed to send verification success email");
   }
 };
 
-module.exports = { sendOtpEmail, sendVerificationSuccessEmail, verifyTransporter };
+module.exports = { sendOtpEmail, sendVerificationSuccessEmail, verifyEmailService };
