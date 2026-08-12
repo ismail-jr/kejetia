@@ -22,7 +22,9 @@ const BREVO_ACCOUNT_URL = "https://api.brevo.com/v3/account";
 const FROM_ADDRESS = process.env.EMAIL_FROM || "no-reply@kejetia.app";
 const FROM_NAME = process.env.EMAIL_FROM_NAME || "Kejetia";
 
-const apiKey = () => process.env.BREVO_API_KEY;
+// .trim() guards against a trailing newline/space from copy-pasting the key
+// into .env, which otherwise produces a confusing "Key not found" error.
+const apiKey = () => process.env.BREVO_API_KEY?.trim();
 
 const brevoRequest = async (url, options = {}) => {
   const res = await fetch(url, {
@@ -76,7 +78,16 @@ const verifyEmailService = async () => {
     console.log("[email] Brevo API key verified and ready.");
     return true;
   } catch (err) {
-    console.error("[email] Brevo verification failed:", err.message);
+    console.error(
+      "[email] Brevo verification failed:",
+      err.message,
+      err.message === "Key not found"
+        ? "— usually means the key was created under SMTP & API > SMTP " +
+            "(an SMTP password) instead of SMTP & API > API Keys (a v3 key " +
+            "starting with xkeysib-), or a masked/partial key was copied " +
+            "instead of the full key shown once at creation."
+        : "",
+    );
     return false;
   }
 };
