@@ -35,6 +35,12 @@ const OTP_TTL_SECONDS = 10 * 60; // code lifetime: 10 minutes
 const OTP_EXPIRY_MINUTES = 10; // human-readable, used in the email
 const OTP_MAX_VERIFY_ATTEMPTS = 5; // wrong tries before a code is burned
 const RESEND_COOLDOWN_SECONDS = 60; // min gap between code sends per email
+// How long the in-progress registration (name/role/pending auth user, etc.)
+// stays resumable, independent of any single code's 10-minute life. Kept
+// deliberately longer than OTP_TTL_SECONDS so "Resend code" still works
+// after the first code has expired, instead of forcing the user to redo
+// the whole registration form just because they were slow to check email.
+const PENDING_REGISTRATION_TTL_SECONDS = 30 * 60;
 const LOGIN_MAX_ATTEMPTS = 5; // failed sign-ins before lockout
 const LOGIN_LOCK_SECONDS = 15 * 60; // lockout duration
 
@@ -42,6 +48,7 @@ const LOGIN_LOCK_SECONDS = 15 * 60; // lockout duration
 // Redis key helpers
 // ─────────────────────────────────────────────
 const OTP_KEY = (email) => `otp:${email}`;
+const PENDING_REG_KEY = (email) => `pending_reg:${email}`;
 const OTP_ATTEMPTS = (email) => `otp_attempts:${email}`;
 const RESEND_CD = (email) => `otp_resend_cd:${email}`;
 const LOGIN_FAIL = (email) => `login_fail:${email}`;
@@ -198,26 +205,37 @@ const provisionRole = async ({ userId, email, fullName, studentId, role }) => {
   if (error) throw error;
 };
 
-// Generates a fresh OTP, persists its hash + the pending-registration
-// metadata in Redis, sends the email, and arms the resend cooldown.
-// Throws if the email fails to send (so callers can roll back). Never
-// stores the raw password — that already lives in Supabase Auth.
+// Generates a fresh OTP and persists it in Redis, sends the email, and
+// arms the resend cooldown. The pending-registration metadata (name,
+// role, the not-yet-confirmed auth user id) is stored under its own
+// longer-lived key, separate from the OTP hash itself — that's what lets
+// "Resend code" keep working after the previous code's 10-minute window
+// has passed, without losing the in-progress signup. Throws if the email
+// fails to send (so callers can roll back). Never stores the raw
+// password — that already lives in Supabase Auth.
 const issueOtp = async (client, email, meta) => {
   const otp = generateOtp();
 
-  const payload = {
-    hash: hashOtp(otp),
-    fullName: meta.fullName,
-    studentId: meta.studentId || null,
-    role: meta.role,
-    userId: meta.userId,
-    createdAt: Date.now(),
-    expiresAt: Date.now() + OTP_TTL_SECONDS * 1000,
-  };
+  await client.set(
+    PENDING_REG_KEY(email),
+    JSON.stringify({
+      fullName: meta.fullName,
+      studentId: meta.studentId || null,
+      role: meta.role,
+      userId: meta.userId,
+      createdAt: meta.createdAt || Date.now(),
+    }),
+    { EX: PENDING_REGISTRATION_TTL_SECONDS },
+  );
 
-  await client.set(OTP_KEY(email), JSON.stringify(payload), {
-    EX: OTP_TTL_SECONDS,
-  });
+  await client.set(
+    OTP_KEY(email),
+    JSON.stringify({
+      hash: hashOtp(otp),
+      expiresAt: Date.now() + OTP_TTL_SECONDS * 1000,
+    }),
+    { EX: OTP_TTL_SECONDS },
+  );
   await client.set(OTP_ATTEMPTS(email), "0", { EX: OTP_TTL_SECONDS });
 
   // Send first; only arm the cooldown after a successful send so a failed
@@ -320,6 +338,7 @@ const initiateRegister = async (req, res) => {
       }
       await client.del(OTP_KEY(email));
       await client.del(OTP_ATTEMPTS(email));
+      await client.del(PENDING_REG_KEY(email));
       console.error("initiate email send failed:", mailErr.message);
       return res.status(502).json({
         error:
@@ -341,9 +360,12 @@ const initiateRegister = async (req, res) => {
 // ─────────────────────────────────────────────
 //
 // Reuses the pending-registration metadata still cached in Redis and
-// sends a brand-new code, resetting the wrong-attempt counter. Works only
-// while the original verification session is still alive (within the OTP
-// TTL); after that the user must restart registration.
+// sends a brand-new code, resetting the wrong-attempt counter. This reads
+// the long-lived PENDING_REG_KEY rather than the OTP itself, so it keeps
+// working for the full PENDING_REGISTRATION_TTL_SECONDS window even after
+// an earlier code has already expired — that's the whole point of a
+// resend button. Only once that longer session itself lapses does the
+// user need to restart registration from scratch.
 const resendOtp = async (req, res) => {
   try {
     let { email } = req.body;
@@ -361,10 +383,11 @@ const resendOtp = async (req, res) => {
       });
     }
 
-    const raw = await client.get(OTP_KEY(email));
+    const raw = await client.get(PENDING_REG_KEY(email));
     if (!raw) {
       return res.status(400).json({
         error: "Your verification session has expired. Please register again.",
+        code: "SESSION_EXPIRED",
       });
     }
 
@@ -376,6 +399,7 @@ const resendOtp = async (req, res) => {
         studentId: cached.studentId,
         role: cached.role,
         userId: cached.userId,
+        createdAt: cached.createdAt,
       });
     } catch (mailErr) {
       console.error("resend email send failed:", mailErr.message);
@@ -406,21 +430,36 @@ const verifyRegisterOtp = async (req, res) => {
     }
 
     const client = getClient();
+
+    // The pending registration (name/role/pending auth user) outlives any
+    // single code by design — check it first so "code expired" and
+    // "whole session expired" get distinct, actionable responses.
+    const pendingRaw = await client.get(PENDING_REG_KEY(email));
+    if (!pendingRaw) {
+      return res.status(400).json({
+        error: "Your verification session has expired. Please register again.",
+        code: "SESSION_EXPIRED",
+      });
+    }
+    const pending = JSON.parse(pendingRaw);
+
     const raw = await client.get(OTP_KEY(email));
 
     if (!raw) {
-      return res
-        .status(400)
-        .json({ error: "This code has expired. Please request a new one." });
+      return res.status(400).json({
+        error: "This code has expired. Please request a new one.",
+        code: "CODE_EXPIRED",
+      });
     }
 
     const cached = JSON.parse(raw);
 
     if (Date.now() > cached.expiresAt) {
       await client.del(OTP_KEY(email));
-      return res
-        .status(400)
-        .json({ error: "This code has expired. Please request a new one." });
+      return res.status(400).json({
+        error: "This code has expired. Please request a new one.",
+        code: "CODE_EXPIRED",
+      });
     }
 
     const attempts = await client.incr(OTP_ATTEMPTS(email));
@@ -429,6 +468,7 @@ const verifyRegisterOtp = async (req, res) => {
       await client.del(OTP_ATTEMPTS(email));
       return res.status(429).json({
         error: "Too many incorrect attempts. Please request a new code.",
+        code: "CODE_EXPIRED",
       });
     }
 
@@ -440,7 +480,7 @@ const verifyRegisterOtp = async (req, res) => {
       });
     }
 
-    const userId = cached.userId;
+    const userId = pending.userId;
 
     // Confirm the email now that the OTP is verified.
     const { error: confirmError } =
@@ -454,19 +494,20 @@ const verifyRegisterOtp = async (req, res) => {
     await provisionRole({
       userId,
       email,
-      fullName: cached.fullName,
-      studentId: cached.studentId,
-      role: cached.role,
+      fullName: pending.fullName,
+      studentId: pending.studentId,
+      role: pending.role,
     });
 
     const { roles, activeRole, isAdmin } = await loadRoleState(userId);
 
     await client.del(OTP_KEY(email));
     await client.del(OTP_ATTEMPTS(email));
+    await client.del(PENDING_REG_KEY(email));
     await client.del(RESEND_CD(email));
 
     try {
-      await sendVerificationSuccessEmail(email, cached.fullName, cached.role);
+      await sendVerificationSuccessEmail(email, pending.fullName, pending.role);
     } catch (mailErr) {
       console.warn(
         "verifyRegisterOtp: account verified but success email failed:",
