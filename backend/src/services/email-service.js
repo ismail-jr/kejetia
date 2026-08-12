@@ -78,18 +78,37 @@ const verifyEmailService = async () => {
     console.log("[email] Brevo API key verified and ready.");
     return true;
   } catch (err) {
-    console.error(
-      "[email] Brevo verification failed:",
-      err.message,
-      err.message === "Key not found"
-        ? "— usually means the key was created under SMTP & API > SMTP " +
-            "(an SMTP password) instead of SMTP & API > API Keys (a v3 key " +
-            "starting with xkeysib-), or a masked/partial key was copied " +
-            "instead of the full key shown once at creation."
-        : "",
-    );
+    console.error("[email] Brevo verification failed:", err.message, brevoErrorHint(err.message));
     return false;
   }
+};
+
+// Brevo's own error messages are accurate but don't point at the fix. This
+// maps the couple of cases we've actually hit to actionable next steps so
+// they don't need re-diagnosing every time (e.g. after a Render redeploy
+// gets a new outbound IP).
+const brevoErrorHint = (message) => {
+  if (message === "Key not found") {
+    return (
+      "— usually means the key was created under SMTP & API > SMTP " +
+      "(an SMTP password) instead of SMTP & API > API Keys (a v3 key " +
+      "starting with xkeysib-), or a masked/partial key was copied " +
+      "instead of the full key shown once at creation."
+    );
+  }
+
+  if (/unrecognised ip|ip not authorized|not verified/i.test(message)) {
+    return (
+      "— Brevo's IP allowlisting blocked this request. Either authorize " +
+      "this IP at https://app.brevo.com/security/authorised_ips, or (since " +
+      "Render/most hosts don't give a fixed outbound IP on free tiers) go " +
+      "to Settings > Security > Authorised IPs and 'Deactivate for API' to " +
+      "stop blocking by IP — the API key itself remains the auth secret " +
+      "either way, so keep it out of git as usual."
+    );
+  }
+
+  return "";
 };
 
 // ─────────────────────────────────────────────
